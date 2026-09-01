@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "run": {
+    "name": "suniward-smoke",
+    "phase": "smoke",
+    "output": "results/pipeline"
+  },
+  "dataset": {
+    "clean_manifest": null,
+    "real_src": "src/raw_data/real",
+    "ai_src": "src/raw_data/ai",
+    "name": "local-smoke",
+    "source": "local-kaggle",
+    "output": "data/processed",
+    "size": 256,
+    "seed": 42,
+    "limit_per_domain": 10
+  },
+  "steganography": {
+    "stego_manifest": null,
+    "algorithm": "suniward",
+    "payload_bpp": 0.2,
+    "seed": 42,
+    "backend": "conseal",
+    "output": "stego_runs",
+    "cache_dir": "data/.cache/stego",
+    "limit_per_domain": 10
+  },
+  "detector": {
+    "enabled": true,
+    "detector": "srnet",
+    "seeds": [1],
+    "epochs": 1,
+    "batch_size": 4,
+    "learning_rate": 0.001,
+    "device": null,
+    "reference_root": "external/srnet-reference",
+    "output": "results"
+  },
+  "tracking": {
+    "enabled": false,
+    "mode": "disabled",
+    "project": "cross-domain-steganalysis",
+    "entity": null,
+    "upload_pipeline_artifact": false
+  }
+}

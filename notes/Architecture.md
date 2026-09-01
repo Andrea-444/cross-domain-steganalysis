@@ -11,10 +11,20 @@ updated: 2026-09-01
 > [!important] Initial architecture
 > This describes the current working design, not a frozen final architecture. Dataset audits, dependency checks, and pilot experiments may lead to documented changes.
 
+Editable diagram: [[Solution Architecture.drawio]]
+
 ## System flow
 
 ```text
 Natural and AI image sources
+          |
+          v
+Typed JSON run configuration
+configs/
+          |
+          v
+Pipeline runner and explicit stages
+src/pipeline/
           |
           v
 Dataset preparation and normalization
@@ -35,14 +45,25 @@ Detector training and four-direction evaluation
 src/steganalysis/
           |
           v
-Run configuration, metrics, and summaries
+Metrics and repeated-seed summaries
+src/evaluation/
           |
           +------> Local JSON/JSONL artifacts (canonical)
           |
-          +------> Optional W&B tracking and dashboards (proposed)
+          +------> Optional W&B tracking
+                    src/tracking/
 ```
 
 ## Main components
+
+### Pipeline orchestration
+
+- `src/pipeline/configuration.py` — typed schema for a non-interactive JSON run configuration.
+- `src/pipeline/context.py` — shared manifest/result paths and persisted stage records.
+- `src/pipeline/runner.py` — composes stages and saves state before and after every transition.
+- `src/pipeline/steps/` — explicit dataset, embedding, detector, and tracking boundaries.
+- `configs/pipeline.smoke.example.json` — executable smoke-stage configuration template, not a frozen final protocol.
+- Existing domain CLIs remain available for focused work; the runner calls their Python APIs.
 
 ### Dataset pipeline
 
@@ -60,14 +81,17 @@ Run configuration, metrics, and summaries
 ### Steganalysis
 
 - `src/steganalysis/srnet.py` — adapter for the external PyTorch SRNet implementation pinned at commit `2c838cf7d26dd0b8e45eda79ebf103ca312c0355`; SRNet is not rewritten locally.
-- `src/steganalysis/experiments.py` — repeated-seed experiment protocol, metrics, and summaries.
+- `src/steganalysis/experiments.py` — repeated-seed detector training and four-direction evaluation.
+- `src/evaluation/metrics.py` — classification metrics and repeated-seed summaries.
 - `sealwatch==2025.9` — planned SRM/SRMQ1 + FLD classical baseline, pending installation and compatibility validation.
 - `src/steganalysis/aletheia.py` — optional secondary screening and analysis tools.
 
-### Experiment observability — proposed
+### Experiment observability — initial implementation
 
-- Keep local manifests, configuration, predictions, metrics, and summaries as the portable record of each experiment.
-- Add optional W&B logging for epoch histories, run comparison, result tables, confusion matrices, and artifacts.
+- Local manifests, normalized configuration, stage state, metrics, and summaries remain the portable record of each experiment.
+- `src/tracking/wandb.py` provides optional online/offline W&B logging after local artifacts exist.
+- W&B failures are recorded as tracking failures and do not invalidate local scientific results.
+- Epoch histories, result tables, confusion-matrix dashboards, and retention policy remain future tracking work.
 - Define one tracked training run by embedding condition, training domain, and seed; attach evaluation on both test domains to that run.
 - Aggregate the two training domains and repeated seeds into one protocol-level four-direction summary.
 - Support disabled and offline tracking so tests and local development do not require credentials or network access.
@@ -80,6 +104,7 @@ Run configuration, metrics, and summaries
 - A clean cover and its stego counterpart must never cross train/test boundaries.
 - Final comparisons should change the intended experimental variable, not image format, size, or preprocessing.
 - Runs should record their configuration, input manifest, seed, and outputs.
+- Pipeline stages pass typed results through a shared context; orchestration does not own domain algorithms.
 
 ## External dependencies
 
@@ -93,7 +118,6 @@ Run configuration, metrics, and summaries
 
 - Where should large raw data, processed data, caches, models, and results live?
 - Which generated artifacts are reproducible and which require backup?
-- What is the canonical configuration format for final experiment sweeps?
+- Which configuration values will be frozen for final experiment sweeps?
 - How will final tables and figures be generated from run summaries?
 - Which artifacts may be uploaded to W&B, and what retention/storage policy applies?
-- What is the exact mapping between a local run directory, a W&B run ID, and a protocol-level summary?

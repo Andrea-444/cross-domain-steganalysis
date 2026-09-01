@@ -51,15 +51,24 @@ Clean/stego pairs inherit the same `image_id` and split. This prevents a clean c
 
 ```text
 src/
+  pipeline/
+    runner.py         end-to-end stage composition and persisted run state
+    configuration.py typed non-interactive JSON configuration
+    context.py        shared paths and stage execution records
+    steps/            dataset, embedding, detector, and tracking stages
   datasets/
     pipeline.py       acquisition, flattening, balancing, and preprocessing
     manifest.py       stable IDs and pair-safe manifest validation
   steganography/
     core.py           conseal benchmarks and OpenStego demonstrations
   steganalysis/
-    experiments.py    four-direction experiment protocol and metrics
+    experiments.py    four-direction detector training and evaluation protocol
     srnet.py           adapter for the pinned SRNet implementation
     aletheia.py        optional Aletheia setup and screening adapter
+  evaluation/
+    metrics.py        detector metrics and repeated-seed summaries
+  tracking/
+    wandb.py          optional artifact-first W&B integration
   legacy/
     ...               original custom LSB, CNN, and sweep scripts
 ```
@@ -71,7 +80,10 @@ python -m src.datasets
 python -m src.steganography
 python -m src.steganalysis.experiments
 python -m src.steganalysis.aletheia
+python -m src.pipeline --config configs/pipeline.smoke.example.json
 ```
+
+The first four commands remain available for focused stage work. The pipeline command composes them from one validated JSON configuration and saves `pipeline_config.json` and `pipeline_state.json` under a timestamped local run directory. W&B runs only after local state is saved and is disabled by default.
 
 ## Established Tools
 
@@ -289,6 +301,17 @@ results/srnet_YYYYMMDD_HHMMSS/
 ```
 
 SRNet is computationally heavier than the original prototype. Start with one seed and one epoch to verify a new environment, then use the full configuration for actual results.
+
+## Run The Composed Pipeline
+
+Copy and edit the example configuration, then run it non-interactively:
+
+```bash
+cp configs/pipeline.smoke.example.json configs/pipeline.local.json
+python -m src.pipeline --config configs/pipeline.local.json
+```
+
+The configuration can either point to existing clean and stego manifests or define how to prepare and embed them. A pipeline run records every stage as `running`, `completed`, or `failed`. Tracking supports `online`, `offline`, and `disabled` modes; enabling it requires the optional `wandb` package. A W&B failure is recorded but does not invalidate canonical local results.
 
 ## Metrics
 

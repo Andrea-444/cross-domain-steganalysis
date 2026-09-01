@@ -79,3 +79,11 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** The main variable is cover domain. A focused matrix limits compute and avoids diluting the research question with a broad algorithm comparison.
 - **Consequences:** Exclude LSB from the research matrix. Keep WOW only as a separately labelled optional cross-algorithm test. Keep S-UNIWARD at 0.1 bpp as a later optional difficult condition.
 - **Related:** [[Experiment Decisions]], [[Pipeline Summary and Experiment Plan]].
+
+### 2026-09-01 — Compose the workflow through a typed pipeline runner
+
+- **Status:** accepted
+- **Decision:** Use one non-interactive JSON configuration and an explicit pipeline runner for dataset preparation, embedding, detector execution, and optional tracking. Keep scientific logic in its domain modules, persist local configuration and stage state before W&B, and test both individual stages and composition.
+- **Reasoning:** This makes complete runs reproducible without coupling domain algorithms to orchestration or making W&B the source of truth.
+- **Consequences:** Existing focused CLIs remain supported. W&B is optional and non-fatal; local artifacts are canonical. Final sweep values are still provisional.
+- **Related:** [[Architecture]], `src/pipeline/`, `configs/pipeline.smoke.example.json`.
