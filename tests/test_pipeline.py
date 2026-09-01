@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from src.steganalysis.experiments import (
 )
 from src.steganalysis.srnet import DEFAULT_SRNET_ROOT, load_srnet_class
 from src.steganography.core import (
+    benchmark_manifest,
     embed_conseal,
     openstego_embed,
     openstego_extract,
@@ -88,6 +90,57 @@ class SteganographyTests(unittest.TestCase):
             int(np.abs(first.astype(np.int16) - cover.astype(np.int16)).max()),
             1,
         )
+
+    def test_benchmark_reuses_cached_stego_images(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            real = root / "raw" / "real"
+            ai = root / "raw" / "ai"
+            for index in range(3):
+                write_image(real / f"r{index}.png", 20 + index, (80, 80))
+                write_image(ai / f"a{index}.png", 90 + index, (80, 80))
+
+            manifest = prepare_domains(
+                real_src=real,
+                ai_src=ai,
+                output=root / "processed",
+                name="cachetest",
+                source="fixture",
+                size=64,
+                seed=7,
+            )
+            first_manifest = benchmark_manifest(
+                manifest=manifest,
+                algorithm="wow",
+                payload_bpp=0.2,
+                output=root / "runs",
+                seed=42,
+                backend="conseal",
+                cache_dir=root / "cache",
+                limit_per_domain=2,
+            )
+            second_manifest = benchmark_manifest(
+                manifest=manifest,
+                algorithm="wow",
+                payload_bpp=0.2,
+                output=root / "runs",
+                seed=42,
+                backend="conseal",
+                cache_dir=root / "cache",
+                limit_per_domain=2,
+            )
+            self.assertEqual(
+                [record["stego_path"] for record in read_manifest(first_manifest)],
+                [record["stego_path"] for record in read_manifest(second_manifest)],
+            )
+
+            configs = sorted((root / "runs").glob("*/config.json"))
+            self.assertEqual(len(configs), 2)
+            second_config = json.loads(configs[1].read_text(encoding="utf-8"))
+            self.assertEqual(second_config["generated_count"], 0)
+            self.assertEqual(second_config["reused_count"], 4)
+            self.assertEqual(second_config["record_count"], 4)
+            self.assertEqual(second_config["limit_per_domain"], 2)
 
     @unittest.skipUnless(
         Path("external/openstego/openstego.jar").exists(),

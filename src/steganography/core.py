@@ -111,18 +111,32 @@ def benchmark_manifest(
     seed: int,
     backend: str = "conseal",
     legacy_payload_bits: int = 1,
+    cache_dir: str | Path | None = None,
+    limit_per_domain: int | None = None,
 ) -> Path:
     records = read_manifest(manifest)
     validate_clean_manifest(records)
+    if limit_per_domain is not None:
+        if limit_per_domain <= 0:
+            raise ValueError("limit_per_domain must be greater than zero.")
+        selected: list[dict[str, object]] = []
+        for domain in ("real", "ai"):
+            domain_records = sorted(
+                (record for record in records if record["domain"] == domain),
+                key=lambda record: str(record["image_id"]),
+            )
+            selected.extend(domain_records[:limit_per_domain])
+        records = selected
     payload_label = f"p{int(round(payload_bpp * 100)):03d}"
     label = f"{backend}_{algorithm}_{payload_label}"
     run_dir = timestamped_run_dir(output, label)
+    cache_root = Path(cache_dir) / label / f"seed_{seed}" if cache_dir else None
     stego_records: list[dict[str, object]] = []
+    generated_count = 0
+    reused_count = 0
 
     for index, record in enumerate(records):
         clean_path = Path(str(record["clean_path"]))
-        with Image.open(clean_path) as image:
-            cover = np.array(image.convert("L"), dtype=np.uint8)
         embedding_seed = deterministic_seed(
             seed,
             str(record["image_id"]),
@@ -130,29 +144,46 @@ def benchmark_manifest(
             str(payload_bpp),
         )
 
-        if backend == "conseal":
-            stego = embed_conseal(
-                cover,
-                algorithm=algorithm,
-                payload_bpp=payload_bpp,
-                seed=embedding_seed,
+        if cache_root:
+            destination = (
+                cache_root
+                / str(record["domain"])
+                / "stego"
+                / f"{record['image_id']}.png"
             )
-        elif backend == "legacy":
-            next_path = Path(str(records[(index + 1) % len(records)]["clean_path"]))
-            with Image.open(next_path) as image:
-                secret = np.array(image.convert("L"), dtype=np.uint8)
-            stego = embed_legacy(cover, secret, payload_bits=legacy_payload_bits)
         else:
-            raise ValueError("backend must be 'conseal' or 'legacy'.")
+            destination = (
+                run_dir
+                / str(record["domain"])
+                / "stego"
+                / f"{record['image_id']}.png"
+            )
 
-        destination = (
-            run_dir
-            / str(record["domain"])
-            / "stego"
-            / f"{record['image_id']}.png"
-        )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(stego, mode="L").save(destination, format="PNG")
+        if destination.exists():
+            reused_count += 1
+        else:
+            with Image.open(clean_path) as image:
+                cover = np.array(image.convert("L"), dtype=np.uint8)
+
+            if backend == "conseal":
+                stego = embed_conseal(
+                    cover,
+                    algorithm=algorithm,
+                    payload_bpp=payload_bpp,
+                    seed=embedding_seed,
+                )
+            elif backend == "legacy":
+                next_path = Path(str(records[(index + 1) % len(records)]["clean_path"]))
+                with Image.open(next_path) as image:
+                    secret = np.array(image.convert("L"), dtype=np.uint8)
+                stego = embed_legacy(cover, secret, payload_bits=legacy_payload_bits)
+            else:
+                raise ValueError("backend must be 'conseal' or 'legacy'.")
+
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(stego, mode="L").save(destination, format="PNG")
+            generated_count += 1
+
         stego_records.append(
             {
                 **record,
@@ -171,13 +202,18 @@ def benchmark_manifest(
         "payload_bpp": payload_bpp,
         "seed": seed,
         "input_manifest": str(Path(manifest).resolve()),
+        "limit_per_domain": limit_per_domain,
         "record_count": len(records),
+        "generated_count": generated_count,
+        "reused_count": reused_count,
+        "cache_dir": str(cache_root.resolve()) if cache_root else None,
     }
     (run_dir / "config.json").write_text(
         json.dumps(config, indent=2),
         encoding="utf-8",
     )
-    print(f"Generated {len(records)} stego images.")
+    print(f"Generated {generated_count} stego images.")
+    print(f"Reused {reused_count} cached stego images.")
     print(f"Run folder: {run_dir.resolve()}")
     print(f"Manifest: {output_manifest.resolve()}")
     return output_manifest
@@ -347,6 +383,20 @@ def parse_args() -> argparse.Namespace:
     benchmark.add_argument("--output", default="stego_runs")
     benchmark.add_argument("--backend", choices=["conseal", "legacy"], default="conseal")
     benchmark.add_argument("--legacy-payload-bits", type=int, choices=[1, 2, 3, 4], default=1)
+    benchmark.add_argument(
+        "--limit-per-domain",
+        type=int,
+        default=None,
+        help="Process at most this many real and this many AI covers.",
+    )
+    benchmark.add_argument(
+        "--cache-dir",
+        default=None,
+        help=(
+            "Optional stable cache for stego PNGs. Existing image_ids for the same "
+            "backend/algorithm/payload/seed are reused instead of regenerated."
+        ),
+    )
 
     setup = subparsers.add_parser("setup-openstego")
     setup.add_argument("--output", default="external/openstego")
@@ -379,6 +429,8 @@ def main() -> None:
             seed=args.seed,
             backend=args.backend,
             legacy_payload_bits=args.legacy_payload_bits,
+            cache_dir=args.cache_dir,
+            limit_per_domain=args.limit_per_domain,
         )
     elif args.command == "setup-openstego":
         setup_openstego(args.output)
