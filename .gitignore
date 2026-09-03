@@ -8,3 +8,7 @@ external/
 results/
 stego_runs/
 .idea/
+
+# Claude Code: share the project skills, keep machine-local settings out.
+.claude/settings.local.json
+.gitflow/

@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-09-01
+updated: 2026-09-03
 ---
 
 # Development Log
@@ -58,3 +58,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The actual GenImage++ archive layout and the ImageNet validation-label mapping still need verification against downloaded source files before creating the real indexes.
 - **Next step:** Obtain the source archives and label metadata, build the indexes and selection manifest, then extract and inspect the 100-image-per-domain audit cohort.
 - **Related files/results:** [[Architecture]], [[Decisions]], `src/datasets/index.py`, `src/datasets/selection.py`, `src/datasets/extractor.py`.
+
+## 2026-09-03 — Gitflow workflow skill added
+
+- **Goal:** Record the repository's branching, verification, and artifact rules as an executable workflow instead of re-deriving them each session.
+- **Work completed:** Added the `gitflow-feature-workflow` skill under `.claude/skills/` with feature/hotfix/release playbooks, a plan-handoff reference, a project-context reference for the `AGENTS.md` + `agent-instructions/` + `notes/` tiers, and a self-check script. Initialized the `dev` branch from `main` and published it.
+- **Commands or experiment configuration:** `sh .claude/skills/gitflow-feature-workflow/scripts/check_skill.sh`; full unit suite run bare to check its exit code.
+- **Result:** All 21 tests passed and the skill self-check passed. Branch prefixes are `feat`, `bug`, `spec`, and `junk`; `wip` was dropped because it labels a state rather than a kind of change and encourages long-lived divergence from `dev`.
+- **Problems or surprises:** Two environment gotchas are now recorded in the skill: a bare `python` and `conda` are unavailable in non-interactive shells, so the environment interpreter must be called by absolute path, and `head` on this machine resolves to LWP's HTTP tool rather than GNU `head`. Piping the test suite also hides its exit code.
+- **Next step:** Use the skill for the detector observability work — preserved test probabilities, epoch history, checkpoints, per-seed outputs, and MPS device selection.
+- **Related files/results:** `.claude/skills/gitflow-feature-workflow/`, `.gitignore`.
