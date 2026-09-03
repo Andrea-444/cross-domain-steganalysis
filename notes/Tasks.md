@@ -96,5 +96,6 @@ updated: 2026-09-01
 
 - [x] Create the initial Obsidian-compatible project note structure.
 - [x] Implement the current dataset → embedding → SRNet → four-direction evaluation skeleton.
+- [x] Implement immutable dataset indexes, deterministic class-matched selection, and incremental audit/pilot/full extraction.
 - [x] Run the repository unit test suite successfully on 2026-08-31 (8 tests; development verification only).
 - [x] Create the central pipeline and experiment-planning summary.

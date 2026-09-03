@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import subprocess
@@ -10,7 +11,10 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from src.datasets.extractor import extract_selection_stage
+from src.datasets.index import build_dataset_index
 from src.datasets.manifest import stable_id, write_manifest
+from src.datasets.selection import create_selection_manifest
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
@@ -314,11 +318,96 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--limit-per-domain", type=int, default=None)
     prepare.add_argument("--size", type=int, default=256)
     prepare.add_argument("--seed", type=int, default=42)
+
+    index = subparsers.add_parser(
+        "index",
+        help="Index native image candidates in a directory or archive.",
+    )
+    index.add_argument("--input", required=True)
+    index.add_argument("--dataset-id", required=True)
+    index.add_argument("--dataset-version", required=True)
+    index.add_argument("--domain", choices=["real", "ai"], required=True)
+    index.add_argument("--output", required=True)
+    index.add_argument("--class-map", default=None)
+    index.add_argument("--class-map-member-column", default="source_member")
+    index.add_argument("--class-map-class-column", default="class_id")
+    index.add_argument("--no-parent-class", action="store_true")
+    index.add_argument("--allow-unclassified", action="store_true")
+
+    select = subparsers.add_parser(
+        "select",
+        help="Create a deterministic class-matched selection manifest.",
+    )
+    select.add_argument("--real-index", required=True)
+    select.add_argument("--ai-index", required=True)
+    select.add_argument("--output", required=True)
+    select.add_argument("--count-per-domain", type=int, default=6000)
+    select.add_argument("--audit-count", type=int, default=100)
+    select.add_argument("--pilot-total", type=int, default=500)
+    select.add_argument("--seed", type=int, default=42)
+    select.add_argument("--train-ratio", type=float, default=2 / 3)
+    select.add_argument("--val-ratio", type=float, default=1 / 6)
+
+    extract = subparsers.add_parser(
+        "extract",
+        help="Incrementally materialize audit, pilot, or full selections.",
+    )
+    extract.add_argument("--selection-manifest", required=True)
+    extract.add_argument("--output", default="data/raw/selected")
+    extract.add_argument("--stage", choices=["audit", "pilot", "full"], required=True)
+    extract.add_argument("--extraction-manifest", default=None)
+    extract.add_argument(
+        "--materialization",
+        choices=["copy", "hardlink", "symlink"],
+        default="copy",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.command == "index":
+        path = build_dataset_index(
+            source=args.input,
+            dataset_id=args.dataset_id,
+            dataset_version=args.dataset_version,
+            domain=args.domain,
+            output=args.output,
+            class_map_path=args.class_map,
+            class_map_member_column=args.class_map_member_column,
+            class_map_class_column=args.class_map_class_column,
+            infer_class_from_parent=not args.no_parent_class,
+            allow_unclassified=args.allow_unclassified,
+        )
+        print(f"Dataset index: {path.resolve()}")
+        return
+
+    if args.command == "select":
+        path = create_selection_manifest(
+            real_index=args.real_index,
+            ai_index=args.ai_index,
+            output=args.output,
+            count_per_domain=args.count_per_domain,
+            audit_count=args.audit_count,
+            pilot_total=args.pilot_total,
+            seed=args.seed,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+        )
+        print(f"Selection manifest: {path.resolve()}")
+        return
+
+    if args.command == "extract":
+        result = extract_selection_stage(
+            selection_manifest=args.selection_manifest,
+            output=args.output,
+            stage=args.stage,
+            extraction_manifest=args.extraction_manifest,
+            materialization=args.materialization,
+        )
+        print(json.dumps(result, indent=2))
+        return
+
     if args.command == "prepare":
         prepare_domains(
             real_src=args.real_src,

@@ -87,3 +87,11 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** This makes complete runs reproducible without coupling domain algorithms to orchestration or making W&B the source of truth.
 - **Consequences:** Existing focused CLIs remain supported. W&B is optional and non-fatal; local artifacts are canonical. Final sweep values are still provisional.
 - **Related:** [[Architecture]], `src/pipeline/`, `configs/pipeline.smoke.example.json`.
+
+### 2026-09-01 — Select once and materialize dataset cohorts incrementally
+
+- **Status:** accepted
+- **Decision:** Build immutable source indexes and one deterministic class-matched selection manifest before extraction. Materialize 100-image audit, 500-image cumulative pilot, and full cohorts without selecting or storing duplicate source images.
+- **Reasoning:** Later stages can add only missing images while preserving reproducibility and preventing accidental selection overlap.
+- **Consequences:** Final-test membership is fixed at selection time and excluded from audit/pilot work. Source archives are downloaded once; checksums guard the extracted corpus.
+- **Related:** [[Architecture]], `src/datasets/index.py`, `src/datasets/selection.py`, `src/datasets/extractor.py`.
