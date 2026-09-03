@@ -27,6 +27,19 @@ Pipeline runner and explicit stages
 src/pipeline/
           |
           v
+Source archive/directory indexing
+src/datasets/index.py
+          |
+          v
+Deterministic class-matched selection
+audit -> pilot additions -> full additions
+src/datasets/selection.py
+          |
+          v
+Checksum-verified incremental extraction
+src/datasets/extractor.py
+          |
+          v
 Dataset preparation and normalization
 src/datasets/
           |
@@ -69,6 +82,10 @@ src/evaluation/
 
 - `src/datasets/pipeline.py` — acquisition, balancing, preprocessing, and normalization.
 - `src/datasets/manifest.py` — stable identifiers, manifest I/O, and validation.
+- `src/datasets/index.py` — immutable native-source candidate indexes for directories, ZIP, TAR, and TAR.ZST archives.
+- `src/datasets/selection.py` — deterministic class matching, fixed splits, and disjoint extraction cohorts.
+- `src/datasets/extractor.py` — cumulative audit/pilot/full materialization with checksums and reuse.
+- The final test split is selected up front but excluded from audit and pilot cohorts.
 
 ### Steganography
 

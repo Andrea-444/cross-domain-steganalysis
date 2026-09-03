@@ -225,25 +225,58 @@ python -m src.datasets download \
 
 If the downloaded structure contains recognizable `real`/`nature` and `ai`/`fake` directories, normalization starts automatically. Otherwise, run `src.datasets prepare` with explicit paths.
 
-### What GenImage is
+### Candidate indexing and incremental extraction
 
-[GenImage](https://github.com/GenImage-Dataset/GenImage) is a million-scale dataset of natural ImageNet images and AI-generated images from generators including Stable Diffusion, Midjourney, ADM, GLIDE, Wukong, VQDM, and BigGAN.
+The current working candidates are GenImage++ FLUX for AI covers and ImageNet ILSVRC validation images for natural covers. This pair is not frozen until the native-image audit passes. The older `download --source genimage` command targets the original GenImage release and is not the GenImage++ acquisition path.
 
-GenImage does **not** contain steganographic images. This project uses it as a source of clean natural and AI covers, then applies the same `conseal` algorithm and payload to both domains.
-
-The official Google Drive release is very large and each generator archive is split into many parts. The downloader therefore requires explicit confirmation:
+Download each source archive once, then index its image members without normalizing or extracting the whole corpus:
 
 ```bash
-python -m src.datasets download \
-  --source genimage \
-  --generator stable-diffusion-v1-4 \
-  --split val \
-  --limit-per-domain 1000 \
-  --output data/raw \
-  --accept-large-download
+python -m src.datasets index \
+  --input data/raw/genimagepp/flux.tar.zst \
+  --dataset-id genimagepp-flux \
+  --dataset-version hf-4160fbc \
+  --domain ai \
+  --output data/indexes/genimagepp-flux.jsonl
+
+python -m src.datasets index \
+  --input data/raw/imagenet/ILSVRC2012_img_val.tar \
+  --dataset-id imagenet-ilsvrc2012-val \
+  --dataset-version ilsvrc2012 \
+  --domain real \
+  --class-map data/metadata/imagenet-val-class-map.csv \
+  --class-map-member-column filename \
+  --class-map-class-column class_id \
+  --no-parent-class \
+  --output data/indexes/imagenet-val.jsonl
 ```
 
-`--limit-per-domain` controls the processed subset, but the official archive still has to be downloaded before sampling. Check disk space first.
+The class-map example represents a normalized `filename,class_id` file that must be derived and verified from the official ImageNet metadata. If an archive already stores images under class directories, parent-directory class inference is the default.
+
+Create one immutable, class-count-matched selection before extracting anything:
+
+```bash
+python -m src.datasets select \
+  --real-index data/indexes/imagenet-val.jsonl \
+  --ai-index data/indexes/genimagepp-flux.jsonl \
+  --count-per-domain 6000 \
+  --audit-count 100 \
+  --pilot-total 500 \
+  --seed 42 \
+  --output data/selections/working-pair.jsonl
+```
+
+Materialize cumulative stages from that same selection:
+
+```bash
+python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage audit --output data/raw/selected
+python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage pilot --output data/raw/selected
+python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage full --output data/raw/selected
+```
+
+`audit` contains 100 images per domain. `pilot` reuses those files and adds 400 per domain. `full` reuses both earlier stages and adds the remaining selected images. Content checksums prevent silent replacement or duplicate extraction. Final test members are assigned from the beginning and never enter audit or pilot cohorts.
+
+For active experiments, keep the selected native corpus on a local or external NVMe filesystem. Compressed archives are suitable for cold storage; network/object storage is better used as a source or backup than as the direct image-training path.
 
 ## Generate Research Stego Images
 

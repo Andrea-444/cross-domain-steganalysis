@@ -48,3 +48,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** W&B is intentionally optional and was not installed or contacted during verification.
 - **Next step:** Review and adjust the smoke configuration paths, then run a small end-to-end smoke test only when the intended local inputs and compute environment are ready.
 - **Related files/results:** [[Architecture]], [[Decisions]], `src/pipeline/`, `src/evaluation/`, `src/tracking/`.
+
+## 2026-09-01 — Incremental dataset selection implemented
+
+- **Goal:** Select the audit, pilot, and full image cohorts once so later stages reuse the same images without overlap or test-set leakage.
+- **Work completed:** Added native-source indexing, deterministic class-matched selection manifests, locked pair-safe splits, cumulative cohort labels, checksum-verified incremental extraction, CLI commands, and synthetic tests for directories, ZIP, and TAR.ZST archives.
+- **Commands or experiment configuration:** Ran `python -m unittest discover -s tests -v`; no dataset was downloaded or extracted.
+- **Result:** All 21 tests passed. Audit uses 100 images per domain, pilot cumulatively uses 500, and the planned full cohort uses 6,000 by default. Final-test images are selected at the start but excluded from audit and pilot materialization.
+- **Problems or surprises:** The actual GenImage++ archive layout and the ImageNet validation-label mapping still need verification against downloaded source files before creating the real indexes.
+- **Next step:** Obtain the source archives and label metadata, build the indexes and selection manifest, then extract and inspect the 100-image-per-domain audit cohort.
+- **Related files/results:** [[Architecture]], [[Decisions]], `src/datasets/index.py`, `src/datasets/selection.py`, `src/datasets/extractor.py`.

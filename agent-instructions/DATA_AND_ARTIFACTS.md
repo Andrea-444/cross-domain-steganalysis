@@ -8,6 +8,9 @@ The code and README currently use these locations:
 |---|---|
 | `src/raw_data/` | Existing local natural and AI source images described by the README |
 | `data/raw/` | Default programmatic download destination |
+| `data/indexes/` | Immutable native-source candidate indexes and index configuration |
+| `data/selections/` | Deterministic class-matched selection manifests and configuration |
+| `data/raw/selected/` | Incrementally materialized native audit, pilot, and full selections |
 | `data/processed/` | Normalized images and clean manifests |
 | `data/.cache/` | Tool caches, including `conseal` and OpenStego runtime data |
 | `stego_runs/` | Timestamped steganographic benchmark runs |
@@ -21,6 +24,8 @@ The `.gitignore` currently excludes `data/`, `external/`, `results/`, `stego_run
 - Treat raw images, processed datasets, stego images, trained weights, caches, manifests, and result directories as user data.
 - Do not delete, rename, overwrite, or bulk-regenerate them unless the user requests it and the exact target is verified.
 - Preserve timestamped run directories. Create a new run instead of rewriting an old result.
+- Preserve dataset indexes and selection manifests once they are used. Create a new named selection instead of overwriting one.
+- Keep source archives immutable. Incremental extraction must reuse checksum-matched files and reject changed content.
 - Do not hand-edit scientific result JSON or manifests to make a run appear successful.
 - Keep the input manifest with a result run when the current workflow does so.
 - Preserve absolute paths already recorded in artifacts, but note that they reduce portability when interpreting or moving a run.
@@ -36,6 +41,7 @@ For controlled comparisons:
 - preserve source provenance and relative source paths in the clean manifest;
 - verify output counts, image mode, dimensions, and split membership;
 - never reuse a clean cover across conflicting splits through its stego counterpart.
+- assign the final test split before audit/pilot extraction and do not expose final-test images to method-selection pilots.
 
 The current default normalization size is 256×256 grayscale PNG. Treat color, variable-size, or JPEG-domain work as a new protocol unless the user explicitly makes it part of the controlled experiment.
 
