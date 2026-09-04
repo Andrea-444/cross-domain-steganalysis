@@ -81,7 +81,7 @@ Run, in order:
 2. The full test suite.
 
 ```bash
-~/miniconda3/envs/experimental_1/bin/python -m unittest discover -s tests -v
+~/miniconda3/envs/experimental_1/bin/python -m unittest discover -s tests -t . -v
 ```
 
 Lint and format checks are N/A in this repository. Never merge red. Report skipped tests separately from passes. If an unrelated pre-existing failure remains, report it and ask how to proceed.
