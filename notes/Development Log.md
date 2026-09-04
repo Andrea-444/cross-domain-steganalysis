@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-09-03
+updated: 2026-09-04
 ---
 
 # Development Log
@@ -68,3 +68,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Two environment gotchas are now recorded in the skill: a bare `python` and `conda` are unavailable in non-interactive shells, so the environment interpreter must be called by absolute path, and `head` on this machine resolves to LWP's HTTP tool rather than GNU `head`. Piping the test suite also hides its exit code.
 - **Next step:** Use the skill for the detector observability work — preserved test probabilities, epoch history, checkpoints, per-seed outputs, and MPS device selection.
 - **Related files/results:** `.claude/skills/gitflow-feature-workflow/`, `.gitignore`.
+
+## 2026-09-04 — Detector run observability implemented
+
+- **Goal:** Make one SRNet protocol run interpretable after the fact instead of discarding the evidence needed to analyse it.
+- **Work completed:** Device selection now prefers CUDA, then MPS, then CPU. Training returns structured epoch history including validation accuracy and balanced accuracy, and writes the selected checkpoint with its selection metadata. The runner keeps per-image predictions and probabilities for all four directions, preserves per-seed metrics next to the aggregate summary, and records provenance: manifest SHA-256, dataset counts, embedding condition, detector commit, repository commit and dirty flag, device, platform, dependency versions, and timing. Verified that the reference model ends in `LogSoftmax`, so the retained score is a true `P(stego)`; ROC-AUC and PR-AUC are therefore reported.
+- **Commands or experiment configuration:** Full suite run bare; plus a two-epoch integration run on the existing 20-record S-UNIWARD 0.2 bpp smoke manifest to exercise the unmocked path.
+- **Result:** 36 tests passed, exit code 0. The smoke run selected `mps` automatically and produced the full `history/`, `checkpoints/`, and `predictions/` layout. Its metrics are meaningless (7 training images) and are development verification only, not evidence.
+- **Problems or surprises:** `embedding_seed` is assigned per image, so the first provenance implementation recorded a list of every distinct seed. It now summarises a varying seed as a count; the run-level master seed remains in the stego run's own `config.json`. Measured MPS at roughly 19x CPU throughput for a batch-16 training step, which is what makes the full matrix feasible locally.
+- **Next step:** Resume/idempotency for interrupted multi-seed runs, the protocol-level aggregator, and mirroring the new fields into W&B. Separately, the dataset archives still need acquiring before any real cohort exists.
+- **Related files/results:** `src/steganalysis/srnet.py`, `src/steganalysis/experiments.py`, `src/evaluation/metrics.py`, `tests/steganalysis/test_observability.py`.

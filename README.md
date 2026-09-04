@@ -330,8 +330,27 @@ Each result run contains:
 results/srnet_YYYYMMDD_HHMMSS/
   config.json
   dataset_manifest.jsonl
-  summary.json
+  summary.json                      per-seed metrics, aggregates, and provenance
+  history/seed<N>_<domain>.json     per-epoch training and validation metrics
+  checkpoints/seed<N>_<domain>.pt   selected weights and selection metadata
+  predictions/seed<N>_<direction>.jsonl   per-image label, prediction, probability
 ```
+
+`summary.json` keeps each seed's metrics under `runs` alongside the aggregate
+`summary`, and records provenance: manifest SHA-256, dataset counts by domain and
+split, embedding condition read from the manifest, detector commit, repository
+commit and dirty flag, resolved device, platform, dependency versions, and timing.
+
+Because the reference model ends in `LogSoftmax`, the retained probability is a
+genuine `P(stego)`, so `summary.json` also reports ROC-AUC and PR-AUC. Both are
+`null` for a direction whose test labels contain only one class.
+
+The training device is chosen in the order explicit `--device`, CUDA, MPS, CPU.
+On Apple Silicon this selects the GPU: an SRNet training step measured roughly
+nineteen times faster on MPS than on CPU on the reference machine.
+
+Checkpoint selection uses validation loss. Validation accuracy and balanced
+accuracy are recorded per epoch but do not currently affect selection.
 
 SRNet is computationally heavier than the original prototype. Start with one seed and one epoch to verify a new environment, then use the full configuration for actual results.
 
