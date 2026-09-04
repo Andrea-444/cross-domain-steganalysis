@@ -85,7 +85,7 @@ forbid_match references/plan.md 'feature/<short-name>'
 require_match SKILL.md 'agent-instructions/'
 require_match SKILL.md 'notes/Decisions.md'
 require_match references/plan.md 'envs/experimental_1/bin/python'
-require_match references/plan.md 'unittest discover -s tests'
+require_match references/plan.md 'unittest discover -s tests -t .'
 
 # GitHub, not GitLab
 forbid_match SKILL.md 'glab'

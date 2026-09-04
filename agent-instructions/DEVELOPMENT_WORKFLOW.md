@@ -29,8 +29,13 @@ Use each command's `--help` output or its parser implementation as the authority
 The documented full test command is:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 ```
+
+The `-t .` flag sets the top-level directory to the repository root. Without
+it, discovery puts `tests/` itself on `sys.path` and `tests/datasets/`
+shadows the installed `datasets` library, which breaks the Hugging Face
+acquisition imports.
 
 Some tests are conditionally skipped when optional SRNet or OpenStego dependencies are absent. Report skips separately from passes and failures.
 

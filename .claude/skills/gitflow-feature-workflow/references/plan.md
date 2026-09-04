@@ -92,7 +92,7 @@ Record these verbatim in the plan's Verification section. The project environmen
 
 ```bash
 # Full test suite
-~/miniconda3/envs/experimental_1/bin/python -m unittest discover -s tests -v
+~/miniconda3/envs/experimental_1/bin/python -m unittest discover -s tests -t . -v
 
 # One focused test module
 ~/miniconda3/envs/experimental_1/bin/python -m unittest tests.datasets.test_incremental_selection -v

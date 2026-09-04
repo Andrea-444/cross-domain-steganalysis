@@ -13,6 +13,8 @@ from PIL import Image, ImageOps
 
 from src.datasets.extractor import extract_selection_stage
 from src.datasets.index import build_dataset_index
+from src.datasets.acquisition import add_arguments as add_acquisition_arguments
+from src.datasets.acquisition import run as run_acquisition
 from src.datasets.manifest import stable_id, write_manifest
 from src.datasets.selection import create_selection_manifest
 
@@ -309,6 +311,8 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--output", default="data/raw")
     download.add_argument("--accept-large-download", action="store_true")
 
+    add_acquisition_arguments(subparsers)
+
     prepare = subparsers.add_parser("prepare", help="Normalize two local domain folders.")
     prepare.add_argument("--real-src", required=True)
     prepare.add_argument("--ai-src", required=True)
@@ -366,6 +370,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.command in {"fetch-archive", "fetch-images"}:
+        run_acquisition(args)
+        return
+
     if args.command == "index":
         path = build_dataset_index(
             source=args.input,

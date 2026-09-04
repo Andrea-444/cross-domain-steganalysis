@@ -229,6 +229,47 @@ If the downloaded structure contains recognizable `real`/`nature` and `ai`/`fake
 
 The current working candidates are GenImage++ FLUX for AI covers and ImageNet ILSVRC validation images for natural covers. This pair is not frozen until the native-image audit passes. The older `download --source genimage` command targets the original GenImage release and is not the GenImage++ acquisition path.
 
+### Acquiring the source data
+
+Both cover domains come from Hugging Face, and each needs a different access
+shape.
+
+**AI covers — GenImage++ (`Lunahera/genimagepp`).** Freely downloadable under
+CC-BY-NC-4.0. The repository holds roughly 204 GB across all generators, but the
+working pair needs only `archives/flux.tar.zst` (7.22 GB):
+
+```bash
+python -m src.datasets fetch-archive \
+  --repo Lunahera/genimagepp \
+  --file archives/flux.tar.zst \
+  --output data/raw/genimagepp
+```
+
+An archive already present is reused rather than downloaded again, so the file
+stays immutable for checksum-guarded extraction.
+
+**Natural covers — ImageNet-1k (`ILSVRC/imagenet-1k`).** This dataset is
+**gated**: sign in to Hugging Face, accept the ImageNet Terms of Access on the
+dataset page, then authenticate locally with `hf auth login`. Streaming
+transfers only the rows consumed, so a class-balanced sample costs a small
+fraction of the 50,000-image validation split:
+
+```bash
+python -m src.datasets fetch-images \
+  --repo ILSVRC/imagenet-1k \
+  --split validation \
+  --limit-per-class 10 \
+  --max-classes 100 \
+  --output data/raw/imagenet-val
+```
+
+Images land in `data/raw/imagenet-val/<synset>/`, which the `index` command
+below reads with parent-directory class inference.
+
+Both commands write the **original encoded bytes**. Decoding and re-saving an
+image would add a second JPEG generation, and those artifacts sit in the same
+high-frequency band that steganalysis measures.
+
 Download each source archive once, then index its image members without normalizing or extracting the whole corpus:
 
 ```bash
@@ -439,8 +480,13 @@ This uses Aletheia's pretrained automatic screening. The controlled four-directi
 Run:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 ```
+
+The `-t .` flag sets the top-level directory to the repository root. Without
+it, discovery puts `tests/` itself on `sys.path` and `tests/datasets/`
+shadows the installed `datasets` library, which breaks the Hugging Face
+acquisition imports.
 
 The tests cover:
 
