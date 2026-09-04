@@ -122,6 +122,27 @@ class FetchRepoFileTests(unittest.TestCase):
             self.assertEqual(result.name, "flux.tar.zst")
             self.assertEqual(download.call_args.kwargs["repo_type"], "dataset")
 
+    def test_downloads_directly_into_output_without_cache_copy(self) -> None:
+        """A cached copy would double the disk cost of a multi-gigabyte archive."""
+        with tempfile.TemporaryDirectory() as raw:
+            out = Path(raw) / "out"
+            target = out / "flux.tar.zst"
+
+            def fake_download(**kwargs):
+                assert kwargs["local_dir"] == str(out), kwargs
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"archive")
+                return str(target)
+
+            with patch(
+                "src.datasets.acquisition.hf_hub_download", side_effect=fake_download
+            ):
+                result = fetch_repo_file(
+                    "Lunahera/genimagepp", "archives/flux.tar.zst", out
+                )
+            self.assertEqual(result, target)
+            self.assertEqual(result.read_bytes(), b"archive")
+
     def test_existing_file_is_not_redownloaded(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             out = Path(raw) / "out"

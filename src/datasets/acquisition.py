@@ -46,14 +46,20 @@ def fetch_repo_file(
     destination = output / Path(filename).name
     if destination.exists():
         return destination
-    cached = hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        repo_type="dataset",
-        revision=revision,
-        token=token,
+    # local_dir downloads straight to the target. Going through the shared hub
+    # cache and copying would leave two full copies of a multi-gigabyte archive.
+    downloaded = Path(
+        hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            repo_type="dataset",
+            revision=revision,
+            token=token,
+            local_dir=str(output),
+        )
     )
-    shutil.copy2(cached, destination)
+    if downloaded.resolve() != destination.resolve():
+        shutil.move(str(downloaded), destination)
     return destination
 
 
