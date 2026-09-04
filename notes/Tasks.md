@@ -1,7 +1,7 @@
 ---
 type: task-list
 status: active
-updated: 2026-09-01
+updated: 2026-09-04
 ---
 
 # Tasks
@@ -32,12 +32,12 @@ updated: 2026-09-01
 ## Local experiment pipeline
 
 - [ ] Create one frozen experiment configuration that covers dataset, embedding, training, evaluation, and tracking settings.
-- [ ] Save structured epoch history instead of only printing training/validation loss.
-- [ ] Add validation accuracy and any accepted validation metrics.
-- [ ] Save the selected best checkpoint and selection metadata.
-- [ ] Preserve per-seed metrics rather than writing only aggregate summaries.
-- [ ] Preserve `image_id`, labels, predictions, and probabilities for every test direction.
-- [ ] Add accepted probability-based metrics and plots, such as ROC-AUC and PR-AUC, only after verifying score semantics.
+- [x] Save structured epoch history instead of only printing training/validation loss.
+- [x] Add validation accuracy and any accepted validation metrics.
+- [x] Save the selected best checkpoint and selection metadata.
+- [x] Preserve per-seed metrics rather than writing only aggregate summaries.
+- [x] Preserve `image_id`, labels, predictions, and probabilities for every test direction.
+- [x] Add accepted probability-based metrics and plots, such as ROC-AUC and PR-AUC, only after verifying score semantics. Score semantics verified: the reference model ends in `LogSoftmax`. Plots remain open.
 - [ ] Record full provenance: manifest hash, dataset counts, embedding condition, detector commit, repository state, dependencies, hardware, timing, and exit status.
 - [ ] Define stable run IDs and safe resume/idempotency behavior for interrupted multi-seed experiments.
 - [ ] Document the final experiment configuration and compute requirements.

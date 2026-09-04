@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import random
 import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +14,20 @@ import torch
 from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
+
+from src.evaluation.metrics import calculate_metrics
+
+
+@dataclass
+class TrainingOutcome:
+    """Everything one training run produces beyond the fitted model."""
+
+    model: object
+    device: "torch.device"
+    history: list[dict[str, float]] = field(default_factory=list)
+    best_epoch: int = 0
+    best_val_loss: float = float("inf")
+    best_state: dict | None = None
 
 
 DEFAULT_SRNET_ROOT = Path("external/srnet-reference")
@@ -74,6 +90,22 @@ class ManifestPairDataset(Dataset):
         return tensor, torch.tensor(label, dtype=torch.long), image_id
 
 
+def resolve_device(device_name: str | None) -> torch.device:
+    """Pick the fastest available device: explicit override, then CUDA, MPS, CPU.
+
+    Apple Silicon exposes MPS rather than CUDA. On this project's reference
+    machine an SRNet training step runs roughly nineteen times faster on MPS
+    than on CPU, so falling straight back to CPU makes full runs impractical.
+    """
+    if device_name:
+        return torch.device(device_name)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def initialize_srnet(reference_root: str | Path, device: torch.device):
     srnet_class = load_srnet_class(reference_root)
     model = srnet_class().to(device)
@@ -100,7 +132,7 @@ def train_srnet(
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    device = torch.device(device_name or ("cuda" if torch.cuda.is_available() else "cpu"))
+    device = resolve_device(device_name)
     model = initialize_srnet(reference_root, device)
     train_data = ManifestPairDataset(records, train_domain, "train", augment=True)
     val_data = ManifestPairDataset(records, train_domain, "val", augment=False)
@@ -117,8 +149,11 @@ def train_srnet(
     criterion = nn.NLLLoss()
     best_state = None
     best_val_loss = float("inf")
+    best_epoch = 0
+    history: list[dict[str, float]] = []
 
     for epoch in range(1, epochs + 1):
+        epoch_started = time.time()
         model.train()
         train_loss = 0.0
         train_correct = 0
@@ -138,22 +173,43 @@ def train_srnet(
         model.eval()
         val_loss = 0.0
         val_total = 0
+        val_labels: list[int] = []
+        val_predictions: list[int] = []
         with torch.no_grad():
             for images, labels, _ in val_loader:
                 images = images.to(device)
                 labels = labels.to(device)
-                loss = criterion(model(images), labels)
+                output = model(images)
+                loss = criterion(output, labels)
                 val_loss += loss.item() * labels.size(0)
                 val_total += labels.size(0)
+                val_labels.extend(labels.cpu().tolist())
+                val_predictions.extend(output.argmax(dim=1).cpu().tolist())
         average_val_loss = val_loss / max(val_total, 1)
+        val_metrics = calculate_metrics(val_labels, val_predictions)
+        epoch_record = {
+            "epoch": epoch,
+            "train_loss": train_loss / max(train_total, 1),
+            "train_accuracy": train_correct / max(train_total, 1),
+            "val_loss": average_val_loss,
+            "val_accuracy": float(val_metrics["accuracy"]),
+            "val_balanced_accuracy": float(val_metrics["balanced_accuracy"]),
+            "learning_rate": float(optimizer.param_groups[0]["lr"]),
+            "duration_seconds": time.time() - epoch_started,
+        }
+        history.append(epoch_record)
         print(
             f"domain={train_domain} seed={seed} epoch={epoch}/{epochs} "
-            f"train_loss={train_loss / max(train_total, 1):.4f} "
-            f"train_acc={train_correct / max(train_total, 1):.3f} "
-            f"val_loss={average_val_loss:.4f}"
+            f"train_loss={epoch_record['train_loss']:.4f} "
+            f"train_acc={epoch_record['train_accuracy']:.3f} "
+            f"val_loss={average_val_loss:.4f} "
+            f"val_acc={epoch_record['val_accuracy']:.3f}"
         )
+        # Selection stays on validation loss: changing the criterion would be a
+        # protocol change, so the accuracy metrics above are recorded only.
         if average_val_loss < best_val_loss:
             best_val_loss = average_val_loss
+            best_epoch = epoch
             best_state = {
                 key: value.detach().cpu().clone()
                 for key, value in model.state_dict().items()
@@ -162,7 +218,14 @@ def train_srnet(
     if best_state is not None:
         model.load_state_dict(best_state)
     model.to(device)
-    return model, device
+    return TrainingOutcome(
+        model=model,
+        device=device,
+        history=history,
+        best_epoch=best_epoch,
+        best_val_loss=best_val_loss,
+        best_state=best_state,
+    )
 
 
 @torch.no_grad()
@@ -172,17 +235,20 @@ def predict_srnet(
     test_domain: str,
     batch_size: int,
     device: torch.device,
-) -> tuple[list[int], list[int], list[float]]:
+) -> tuple[list[int], list[int], list[float], list[str]]:
     dataset = ManifestPairDataset(records, test_domain, "test", augment=False)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     labels_out: list[int] = []
     predictions: list[int] = []
     probabilities: list[float] = []
+    image_ids: list[str] = []
     model.eval()
-    for images, labels, _ in loader:
+    for images, labels, batch_ids in loader:
         output = model(images.to(device))
+        # The reference model ends in LogSoftmax, so exp() gives P(stego).
         probability = output.exp()[:, 1]
         predictions.extend(output.argmax(dim=1).cpu().tolist())
         probabilities.extend(probability.cpu().tolist())
         labels_out.extend(labels.tolist())
-    return labels_out, predictions, probabilities
+        image_ids.extend(list(batch_ids))
+    return labels_out, predictions, probabilities, image_ids
