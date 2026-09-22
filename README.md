@@ -263,8 +263,29 @@ python -m src.datasets fetch-images \
   --output data/raw/imagenet-val
 ```
 
-Images land in `data/raw/imagenet-val/<synset>/`, which the `index` command
-below reads with parent-directory class inference.
+Images land in one directory per Hugging Face class label. Build exact
+synset maps from the pinned Hugging Face label order, the ImageNet simple-label
+order, and the official class index:
+
+```bash
+python -m src.datasets fetch-labels \
+  --repo ILSVRC/imagenet-1k \
+  --split validation \
+  --revision <pinned-revision> \
+  --output data/raw/imagenet-hf-labels.json
+
+python -m src.datasets map-genimagepp \
+  --real-src data/raw/imagenet-val \
+  --ai-src data/raw/genimagepp/flux.tar.zst \
+  --imagenet-labels data/raw/imagenet-hf-labels.json \
+  --simple-labels data/raw/imagenet-simple-labels.json \
+  --class-index data/raw/imagenet_class_index.json \
+  --output data/metadata/imagenet-genimagepp
+```
+
+The mapping joins the ordered metadata by class index and requires exact label
+equality; it does not use fuzzy class-name matching. Pass the generated JSONL
+maps to `index` with `--no-parent-class`.
 
 Both commands write the **original encoded bytes**. Decoding and re-saving an
 image would add a second JPEG generation, and those artifacts sit in the same
@@ -313,6 +334,17 @@ Materialize cumulative stages from that same selection:
 python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage audit --output data/raw/selected
 python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage pilot --output data/raw/selected
 python -m src.datasets extract --selection-manifest data/selections/working-pair.jsonl --stage full --output data/raw/selected
+```
+
+Normalize the extracted locked selection without changing its class or split
+assignments:
+
+```bash
+python -m src.datasets prepare-selection \
+  --extraction-manifest data/raw/selected/extraction_manifest.jsonl \
+  --name working-pair \
+  --output data/processed \
+  --size 256
 ```
 
 `audit` contains 100 images per domain. `pilot` reuses those files and adds 400 per domain. `full` reuses both earlier stages and adds the remaining selected images. Content checksums prevent silent replacement or duplicate extraction. Final test members are assigned from the beginning and never enter audit or pilot cohorts.

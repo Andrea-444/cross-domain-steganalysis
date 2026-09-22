@@ -16,12 +16,13 @@ artifacts sit in exactly the high-frequency band a steganalyzer reads.
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from collections import defaultdict
 from pathlib import Path
 
 from datasets import Image as DatasetsImage
-from datasets import load_dataset
+from datasets import load_dataset, load_dataset_builder
 from huggingface_hub import hf_hub_download
 
 
@@ -120,6 +121,43 @@ def stream_images(
     return output
 
 
+def fetch_class_labels(
+    repo_id: str,
+    split: str,
+    output: str | Path,
+    revision: str | None = None,
+    token: str | None = None,
+    class_column: str = "label",
+) -> Path:
+    """Persist the ordered class labels from a pinned dataset schema."""
+    builder = load_dataset_builder(repo_id, revision=revision, token=token)
+    features = builder.info.features
+    if not features or class_column not in features:
+        raise ValueError(f"Dataset schema has no {class_column!r} feature.")
+    names = getattr(features[class_column], "names", None)
+    if not names:
+        raise ValueError(f"Dataset feature {class_column!r} has no ordered labels.")
+    payload = {
+        "schema_version": 1,
+        "repo_id": repo_id,
+        "revision": revision,
+        "split": split,
+        "class_column": class_column,
+        "labels": [str(name) for name in names],
+    }
+    output = Path(output)
+    if output.exists():
+        existing = json.loads(output.read_text(encoding="utf-8"))
+        if existing != payload:
+            raise FileExistsError(
+                f"Label metadata already exists with different content: {output}"
+            )
+        return output
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output
+
+
 def _class_names(dataset, class_column: str) -> list[str] | None:
     feature = getattr(dataset, "features", None)
     if not feature or class_column not in feature:
@@ -177,6 +215,14 @@ def add_arguments(subparsers) -> None:
     stream.add_argument("--revision", default=None)
     stream.add_argument("--output", required=True)
 
+    labels = subparsers.add_parser(
+        "fetch-labels", help="Fetch ordered class labels from a dataset schema."
+    )
+    labels.add_argument("--repo", required=True)
+    labels.add_argument("--split", default="validation")
+    labels.add_argument("--revision", default=None)
+    labels.add_argument("--output", required=True)
+
 
 def run(args: argparse.Namespace) -> Path:
     if args.command == "fetch-archive":
@@ -187,6 +233,15 @@ def run(args: argparse.Namespace) -> Path:
             revision=args.revision,
         )
         print(f"Archive: {path.resolve()}")
+        return path
+    if args.command == "fetch-labels":
+        path = fetch_class_labels(
+            repo_id=args.repo,
+            split=args.split,
+            output=args.output,
+            revision=args.revision,
+        )
+        print(f"Labels: {path.resolve()}")
         return path
     path = stream_images(
         repo_id=args.repo,

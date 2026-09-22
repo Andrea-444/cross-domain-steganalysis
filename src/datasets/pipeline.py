@@ -15,6 +15,7 @@ from src.datasets.extractor import extract_selection_stage
 from src.datasets.index import build_dataset_index
 from src.datasets.acquisition import add_arguments as add_acquisition_arguments
 from src.datasets.acquisition import run as run_acquisition
+from src.datasets.class_mapping import build_genimagepp_class_maps
 from src.datasets.manifest import stable_id, write_manifest
 from src.datasets.selection import create_selection_manifest
 
@@ -365,13 +366,58 @@ def parse_args() -> argparse.Namespace:
         choices=["copy", "hardlink", "symlink"],
         default="copy",
     )
+
+    mapping = subparsers.add_parser(
+        "map-genimagepp",
+        help="Map ImageNet and GenImage++ members to exact ImageNet synset IDs.",
+    )
+    mapping.add_argument("--real-src", required=True)
+    mapping.add_argument("--ai-src", required=True)
+    mapping.add_argument("--imagenet-labels", required=True)
+    mapping.add_argument("--simple-labels", required=True)
+    mapping.add_argument("--class-index", required=True)
+    mapping.add_argument("--output", required=True)
+
+    prepare_selection = subparsers.add_parser(
+        "prepare-selection",
+        help="Normalize an extracted, split-locked selection.",
+    )
+    prepare_selection.add_argument("--extraction-manifest", required=True)
+    prepare_selection.add_argument("--name", required=True)
+    prepare_selection.add_argument("--output", required=True)
+    prepare_selection.add_argument("--size", type=int, default=256)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.command in {"fetch-archive", "fetch-images"}:
+    if args.command in {"fetch-archive", "fetch-images", "fetch-labels"}:
         run_acquisition(args)
+        return
+
+    if args.command == "map-genimagepp":
+        real_map, ai_map = build_genimagepp_class_maps(
+            real_source=args.real_src,
+            ai_source=args.ai_src,
+            imagenet_labels=args.imagenet_labels,
+            simple_labels=args.simple_labels,
+            class_index=args.class_index,
+            output=args.output,
+        )
+        print(f"Real class map: {real_map.resolve()}")
+        print(f"AI class map: {ai_map.resolve()}")
+        return
+
+    if args.command == "prepare-selection":
+        from src.datasets.preparation import prepare_extracted_selection
+
+        path = prepare_extracted_selection(
+            extraction_manifest=args.extraction_manifest,
+            name=args.name,
+            output=args.output,
+            size=args.size,
+        )
+        print(f"Manifest: {path.resolve()}")
         return
 
     if args.command == "index":

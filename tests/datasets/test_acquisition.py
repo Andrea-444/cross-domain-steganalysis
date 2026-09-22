@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.datasets.acquisition import fetch_repo_file, stream_images
+from src.datasets.acquisition import fetch_class_labels, fetch_repo_file, stream_images
 
 
 JPEG_BYTES = b"\xff\xd8\xff\xe0FAKEJPEGBODY\xff\xd9"
@@ -154,6 +154,29 @@ class FetchRepoFileTests(unittest.TestCase):
                 )
             download.assert_not_called()
             self.assertEqual(result.read_bytes(), b"already here")
+
+
+class FetchClassLabelsTests(unittest.TestCase):
+    def test_writes_ordered_labels_with_revision(self) -> None:
+        class Feature:
+            names = ["first", "second"]
+
+        class Info:
+            features = {"label": Feature()}
+
+        class Builder:
+            info = Info()
+
+        with tempfile.TemporaryDirectory() as raw, patch(
+            "src.datasets.acquisition.load_dataset_builder", return_value=Builder()
+        ):
+            output = Path(raw) / "labels.json"
+            fetch_class_labels("repo", "validation", output, revision="abc")
+            import json
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["labels"], ["first", "second"])
+            self.assertEqual(payload["revision"], "abc")
 
 
 if __name__ == "__main__":
