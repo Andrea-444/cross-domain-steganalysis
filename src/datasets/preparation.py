@@ -15,11 +15,41 @@ from src.datasets.manifest import read_manifest, validate_clean_manifest, write_
 from src.datasets.selection import validate_selection_manifest
 
 
+class UndersizedImageError(ValueError):
+    """Raised when crop-only preprocessing cannot fill the target size."""
+
+
+def normalize_image(image: Image.Image, size: int, mode: str = "fit") -> Image.Image:
+    """Convert to grayscale and reduce to `size` x `size`.
+
+    ``fit`` crops to aspect then resamples, so any source resolution works.
+    ``crop`` takes a centred native crop and never resamples: resampling
+    attenuates the high-frequency residuals steganalysis depends on, and
+    domains whose sources differ in resolution would be attenuated by
+    different amounts, which is itself a confound.
+    """
+    if mode not in {"fit", "crop"}:
+        raise ValueError(f"Unknown preprocessing mode: {mode}")
+    image = ImageOps.exif_transpose(image).convert("L")
+    if mode == "fit":
+        return ImageOps.fit(image, (size, size), method=Image.Resampling.LANCZOS)
+    width, height = image.size
+    if min(width, height) < size:
+        raise UndersizedImageError(
+            f"Image is {width}x{height}, smaller than the {size}x{size} crop."
+        )
+    left = (width - size) // 2
+    top = (height - size) // 2
+    return image.crop((left, top, left + size, top + size))
+
+
 def prepare_extracted_selection(
     extraction_manifest: str | Path,
     name: str,
     output: str | Path,
     size: int = 256,
+    mode: str = "fit",
+    skip_undersized: bool = False,
 ) -> Path:
     if not name.strip():
         raise ValueError("Dataset name must not be empty.")
@@ -38,6 +68,7 @@ def prepare_extracted_selection(
         )
 
     clean_records: list[dict[str, object]] = []
+    skipped: list[dict[str, str]] = []
     for record in extraction_records:
         source = Path(str(record.get("local_path", "")))
         if not source.is_file():
@@ -48,7 +79,17 @@ def prepare_extracted_selection(
         domain = str(record["domain"])
         image_id = str(record["candidate_id"])
         destination = dataset_root / domain / f"{image_id}.png"
-        _normalize_incrementally(source, destination, size)
+        try:
+            _normalize_incrementally(source, destination, size, mode=mode)
+        except UndersizedImageError as error:
+            if not skip_undersized:
+                raise
+            # Recorded rather than silently dropped: excluding covers changes
+            # the class balance the selection deliberately established.
+            skipped.append(
+                {"image_id": image_id, "domain": domain, "reason": str(error)}
+            )
+            continue
         with Image.open(destination) as image:
             if image.mode != "L" or image.size != (size, size):
                 raise ValueError(f"Invalid processed image: {destination}")
@@ -83,9 +124,11 @@ def prepare_extracted_selection(
                 "extraction_manifest": str(extraction_manifest),
                 "extraction_manifest_sha256": file_sha256(extraction_manifest),
                 "size": size,
+                "preprocess_mode": mode,
                 "color_mode": "L",
                 "image_format": "PNG",
                 "record_count": len(clean_records),
+                "skipped_undersized": skipped,
                 "clean_manifest_sha256": file_sha256(manifest_path),
             },
             indent=2,
@@ -96,7 +139,9 @@ def prepare_extracted_selection(
     return manifest_path
 
 
-def _normalize_incrementally(source: Path, destination: Path, size: int) -> None:
+def _normalize_incrementally(
+    source: Path, destination: Path, size: int, mode: str = "fit"
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".partial", dir=destination.parent
@@ -105,10 +150,7 @@ def _normalize_incrementally(source: Path, destination: Path, size: int) -> None
     temporary = Path(temporary_name)
     try:
         with Image.open(source) as image:
-            image = ImageOps.exif_transpose(image).convert("L")
-            image = ImageOps.fit(
-                image, (size, size), method=Image.Resampling.LANCZOS
-            )
+            image = normalize_image(image, size=size, mode=mode)
             image.save(temporary, format="PNG", optimize=False)
         if destination.exists():
             if _sha256(destination) != _sha256(temporary):

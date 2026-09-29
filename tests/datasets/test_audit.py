@@ -104,3 +104,45 @@ class SeparabilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PermutationTests(unittest.TestCase):
+    """A score near 0.5 is only meaningful against the null it is compared to."""
+
+    def build(self, directory: Path, distinguishable: bool) -> Path:
+        import json
+        records = []
+        for index in range(25):
+            for domain in ("real", "ai"):
+                if distinguishable:
+                    array = blocky_image(index) if domain == "real" else smooth_image(index)
+                else:
+                    array = smooth_image(index * 2 + (domain == "ai"))
+                path = directory / domain / f"{domain}_{index}.png"
+                write_image(path, array)
+                records.append({"image_id": f"{domain}_{index}", "domain": domain,
+                                "clean_path": str(path), "split": "train"})
+        manifest = directory / "manifest.jsonl"
+        manifest.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+        return manifest
+
+    def test_confounded_pair_is_significant(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            manifest = self.build(Path(raw), distinguishable=True)
+            result = audit_domain_separability(
+                manifest, folds=4, seed=1, permutations=50
+            )
+            self.assertLess(result["p_value"], 0.05)
+
+    def test_clean_pair_is_not_significant(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            manifest = self.build(Path(raw), distinguishable=False)
+            result = audit_domain_separability(
+                manifest, folds=4, seed=1, permutations=50
+            )
+            self.assertGreater(result["p_value"], 0.05)
+
+    def test_permutations_disabled_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            manifest = self.build(Path(raw), distinguishable=False)
+            self.assertIsNone(audit_domain_separability(manifest, folds=4)["p_value"])
