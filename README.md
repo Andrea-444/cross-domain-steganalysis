@@ -460,7 +460,33 @@ means the domains are indistinguishable before embedding. A significant result
 means the pair is confounded and no cross-domain number from it is trustworthy.
 
 This is a necessary check, not a sufficient one: it uses three hand-crafted
-features, while SRNet may exploit differences they do not capture.
+features, while SRNet may exploit differences they do not capture. On the
+first cohort audited it **did** give a false all-clear, so treat it as a cheap
+screen and confirm any pass with the SRNet probe below.
+
+### SRNet domain probe
+
+Ask the detector itself the same question, using clean covers only:
+
+```bash
+python -m src.steganalysis.domain_probe \
+  --manifest data/processed/manifests/<name>_clean.jsonl \
+  --seeds 1 2 3 --epochs 30 --batch-size 16 \
+  --output results/audits/srnet-probe-<name>
+```
+
+Always pair a near-chance result with a positive-control cohort the probe does
+detect; otherwise the null may only mean the probe lacked power. Measured on
+the 100-per-domain cohort with three seeds:
+
+| Cohort | 3-feature balanced accuracy | SRNet balanced accuracy | SRNet ROC-AUC |
+|---|---|---|---|
+| `fit` (crop + resample) | 0.630 | 0.745 | 0.843 |
+| `crop` (native crop) | 0.532 | 0.675 | 0.766 |
+
+Crop-only reduces domain separability but does not remove it. Compression
+history remains unequalized: natural covers are JPEG-sourced, AI covers are
+lossless PNG.
 
 ### Preprocessing modes
 
