@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-09-04
+updated: 2026-09-29
 ---
 
 # Development Log
@@ -98,3 +98,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** `tests/datasets/` shadowed the installed `datasets` library, because discovery placed `tests/` itself on `sys.path`. The documented test command now passes `-t .` so the repository root is the top-level directory instead. This changed a documented command in `README.md` and `agent-instructions/DEVELOPMENT_WORKFLOW.md`. Also note the internal directory layout of the GenImage++ archives is not documented on the dataset card, so class inference must be verified by listing the archive before selection.
 - **Next step:** Download the FLUX archive, list its layout, and confirm whether it carries ImageNet synsets before choosing the class scope for 1,000 covers per domain.
 - **Related files/results:** `src/datasets/acquisition.py`, `tests/datasets/test_acquisition.py`, `requirements.txt`.
+
+## 2026-09-29 — Domain confound audit implemented and run on the smoke100 cohort
+
+- **Goal:** Test the gate that everything downstream depends on: are natural and AI covers distinguishable from clean images alone, before any embedding?
+- **Work completed:** Added `src/datasets/audit.py` and the `audit-domains` command. It scores three interpretable features per cover (8x8 blockiness contrast, Laplacian high-pass energy, neighbour-residual spread) and cross-validates a logistic regression that predicts the domain from clean covers only.
+- **Commands or experiment configuration:** `python -m src.datasets audit-domains --manifest data/processed/manifests/imagenet-flux-smoke100_clean.jsonl`
+- **Result:** 55 tests passed. On the 100-per-domain cohort the domains are **partially separable with no steganography present**: balanced accuracy 0.630, ROC-AUC 0.691 against a 0.5 chance baseline. Feature means: blockiness real=0.0042 / ai=0.0130; high-pass energy real=45.77 / ai=34.96; residual spread real=11.44 / ai=8.74.
+- **Problems or surprises:** Two findings run against expectation. The AI covers are *blockier* than the JPEG-sourced natural covers, not less — plausibly the 8x8 latent-patch structure of the FLUX VAE decoder, which survives where JPEG blocking did not. And the natural covers retain markedly more high-frequency energy, consistent with their much gentler downsampling (about 1.95x from ~500x375) versus the AI covers' exact 4x (1024 to 256). The 0.630 figure is a **lower bound**: it comes from three crude hand-crafted features, and SRNet is purpose-built to exploit exactly this kind of residual difference.
+- **Next step:** Decide whether 0.630 is acceptable, and test crop-only preprocessing as the candidate remedy for the resampling mismatch. This is a protocol decision and is not settled here.
+- **Related files/results:** `src/datasets/audit.py`, `tests/datasets/test_audit.py`, `results/audits/imagenet-flux-smoke100_domain_separability.json`.

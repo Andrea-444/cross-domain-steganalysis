@@ -14,6 +14,8 @@ from PIL import Image, ImageOps
 from src.datasets.extractor import extract_selection_stage
 from src.datasets.index import build_dataset_index
 from src.datasets.acquisition import add_arguments as add_acquisition_arguments
+from src.datasets.audit import add_arguments as add_audit_arguments
+from src.datasets.audit import run as run_audit
 from src.datasets.acquisition import run as run_acquisition
 from src.datasets.class_mapping import build_genimagepp_class_maps
 from src.datasets.manifest import stable_id, write_manifest
@@ -313,6 +315,7 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--accept-large-download", action="store_true")
 
     add_acquisition_arguments(subparsers)
+    add_audit_arguments(subparsers)
 
     prepare = subparsers.add_parser("prepare", help="Normalize two local domain folders.")
     prepare.add_argument("--real-src", required=True)
@@ -391,6 +394,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.command == "audit-domains":
+        run_audit(args)
+        return
+
     if args.command in {"fetch-archive", "fetch-images", "fetch-labels"}:
         run_acquisition(args)
         return
