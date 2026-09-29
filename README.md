@@ -484,9 +484,34 @@ the 100-per-domain cohort with three seeds:
 | `fit` (crop + resample) | 0.630 | 0.745 | 0.843 |
 | `crop` (native crop) | 0.532 | 0.675 | 0.766 |
 
-Crop-only reduces domain separability but does not remove it. Compression
-history remains unequalized: natural covers are JPEG-sourced, AI covers are
-lossless PNG.
+Crop-only reduces domain separability but does not remove it. Equalizing
+compression does not reduce it further:
+
+| Cohort | 3-feature | SRNet balanced accuracy | SRNet ROC-AUC |
+|---|---|---|---|
+| `fit` (crop + resample) | 0.630 | 0.745 (sd 0.050) | 0.843 |
+| `crop` (native crop) | 0.532 | 0.675 (sd 0.056) | 0.766 |
+| `crop` + JPEG q96 on AI | 0.502 | 0.661 (sd 0.049) | 0.798 |
+| `crop` + JPEG q96 on both | 0.497 | 0.688 (sd 0.086) | 0.751 |
+
+Removing the resampling mismatch mattered; equalizing compression did not. The
+residual separability therefore appears intrinsic to the generated images
+rather than an artifact of preparation. Note how far the three-feature screen
+diverges from the probe on the recompressed variants: it reports chance where
+SRNet reports two-thirds accuracy.
+
+Compression history is equalized with:
+
+```bash
+python -m src.datasets recompress-cohort \
+  --manifest data/processed/manifests/<name>_clean.jsonl \
+  --name <variant-name> --output data/processed \
+  --quality 96 --domains ai
+```
+
+JPEG history cannot be removed from covers that already have it, so the only
+available direction is to add matching history to the other domain. The output
+is stored as lossless PNG; only the pixel content carries the quantization.
 
 ### Preprocessing modes
 
