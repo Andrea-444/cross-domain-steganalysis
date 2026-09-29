@@ -438,6 +438,50 @@ python -m src.pipeline --config configs/pipeline.local.json
 
 The configuration can either point to existing clean and stego manifests or define how to prepare and embed them. A pipeline run records every stage as `running`, `completed`, or `failed`. Tracking supports `online`, `offline`, and `disabled` modes; enabling it requires the optional `wandb` package. A W&B failure is recorded but does not invalidate canonical local results.
 
+## Cover-Domain Confound Audit
+
+The cross-domain claim requires that natural and AI covers differ only in how
+they were generated. If they also differ in compression history or resampling
+ratio, a steganalyzer can learn that instead. Audit a clean manifest before
+using it for any experiment:
+
+```bash
+python -m src.datasets audit-domains \
+  --manifest data/processed/manifests/<name>_clean.jsonl \
+  --permutations 200 \
+  --output results/audits/<name>_domain_separability.json
+```
+
+The audit uses clean covers only, with no stego images. It scores three
+features per cover (8x8 blockiness contrast, Laplacian high-pass energy,
+neighbour-residual spread) and cross-validates a classifier predicting the
+domain. Balanced accuracy near 0.5 with a non-significant permutation p-value
+means the domains are indistinguishable before embedding. A significant result
+means the pair is confounded and no cross-domain number from it is trustworthy.
+
+This is a necessary check, not a sufficient one: it uses three hand-crafted
+features, while SRNet may exploit differences they do not capture.
+
+### Preprocessing modes
+
+`prepare-selection` accepts `--preprocess fit` (default: crop to aspect, then
+resample with LANCZOS) or `--preprocess crop` (centred native crop, no
+resampling). Resampling attenuates the high-frequency residuals steganalysis
+depends on, and domains whose sources differ in resolution are attenuated by
+different amounts, which is itself a confound.
+
+On the 100-per-domain ImageNet/GenImage++ cohort, where natural covers
+downsample about 1.95x and AI covers exactly 4x, this mattered:
+
+| Preprocessing | Balanced accuracy | ROC-AUC | Permutation p |
+|---|---|---|---|
+| `fit` (crop + resample) | 0.630 | 0.691 | 0.0050 |
+| `crop` (native crop) | 0.532 | 0.567 | 0.2736 |
+
+Crop-only requires every source image to be at least the target size. Use
+`--skip-undersized` to exclude smaller images; they are recorded in the run
+configuration rather than silently dropped.
+
 ## Metrics
 
 The initial metrics are:

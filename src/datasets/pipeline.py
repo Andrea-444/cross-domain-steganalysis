@@ -389,6 +389,17 @@ def parse_args() -> argparse.Namespace:
     prepare_selection.add_argument("--name", required=True)
     prepare_selection.add_argument("--output", required=True)
     prepare_selection.add_argument("--size", type=int, default=256)
+    prepare_selection.add_argument(
+        "--preprocess",
+        choices=["fit", "crop"],
+        default="fit",
+        help="fit crops then resamples; crop takes a native centre crop only.",
+    )
+    prepare_selection.add_argument(
+        "--skip-undersized",
+        action="store_true",
+        help="With --preprocess crop, skip images smaller than the crop size.",
+    )
     return parser.parse_args()
 
 
@@ -423,6 +434,8 @@ def main() -> None:
             name=args.name,
             output=args.output,
             size=args.size,
+            mode=args.preprocess,
+            skip_undersized=args.skip_undersized,
         )
         print(f"Manifest: {path.resolve()}")
         return

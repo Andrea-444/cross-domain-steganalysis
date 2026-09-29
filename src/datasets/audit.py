@@ -107,6 +107,7 @@ def audit_domain_separability(
     folds: int = 5,
     seed: int = 42,
     path_field: str = "clean_path",
+    permutations: int = 0,
 ) -> dict[str, object]:
     """Classify domain from clean covers alone and report how easy it was."""
     records = read_manifest(manifest)
@@ -140,22 +141,44 @@ def audit_domain_separability(
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
     model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 
-    predictions = np.zeros_like(labels_array)
-    scores = np.zeros(len(labels_array), dtype=np.float64)
-    for train_index, test_index in splitter.split(features_array, labels_array):
-        model.fit(features_array[train_index], labels_array[train_index])
-        predictions[test_index] = model.predict(features_array[test_index])
-        scores[test_index] = model.predict_proba(features_array[test_index])[:, 1]
-
     from sklearn.metrics import balanced_accuracy_score, roc_auc_score
+
+    def cross_validated(target: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        predicted = np.zeros_like(target)
+        probability = np.zeros(len(target), dtype=np.float64)
+        for train_index, test_index in splitter.split(features_array, target):
+            model.fit(features_array[train_index], target[train_index])
+            predicted[test_index] = model.predict(features_array[test_index])
+            probability[test_index] = model.predict_proba(
+                features_array[test_index]
+            )[:, 1]
+        return predicted, probability
+
+    predictions, scores = cross_validated(labels_array)
+    observed = float(balanced_accuracy_score(labels_array, predictions))
+
+    # With a couple of hundred covers, a balanced accuracy slightly above 0.5
+    # is not evidence of anything on its own. Shuffling the domain labels
+    # builds the null distribution this score has to beat.
+    p_value: float | None = None
+    if permutations > 0:
+        rng = np.random.default_rng(seed)
+        null = np.empty(permutations, dtype=np.float64)
+        for index in range(permutations):
+            shuffled = rng.permutation(labels_array)
+            null_predictions, _ = cross_validated(shuffled)
+            null[index] = balanced_accuracy_score(shuffled, null_predictions)
+        p_value = float((np.sum(null >= observed) + 1) / (permutations + 1))
 
     return {
         "manifest": str(Path(manifest).resolve()),
         "counts": dict(counts),
         "folds": folds,
         "seed": seed,
-        "balanced_accuracy": float(balanced_accuracy_score(labels_array, predictions)),
+        "balanced_accuracy": observed,
         "roc_auc": float(roc_auc_score(labels_array, scores)),
+        "permutations": permutations,
+        "p_value": p_value,
         "features": feature_names,
         "per_domain": {
             domain: {name: float(np.mean(values)) for name, values in stats.items()}
@@ -177,6 +200,12 @@ def add_arguments(subparsers) -> None:
     audit.add_argument("--path-field", default="clean_path")
     audit.add_argument("--folds", type=int, default=5)
     audit.add_argument("--seed", type=int, default=42)
+    audit.add_argument(
+        "--permutations",
+        type=int,
+        default=0,
+        help="Label-shuffle iterations for a significance test (e.g. 200).",
+    )
     audit.add_argument("--output", default=None)
 
 
@@ -186,11 +215,17 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         folds=args.folds,
         seed=args.seed,
         path_field=args.path_field,
+        permutations=args.permutations,
     )
     print("\nDomain separability on clean covers only")
     print(f"  counts            : {result['counts']}")
     print(f"  balanced accuracy : {result['balanced_accuracy']:.3f}")
     print(f"  ROC-AUC           : {result['roc_auc']:.3f}")
+    if result.get("p_value") is not None:
+        print(
+            f"  permutation p     : {result['p_value']:.4f} "
+            f"({result['permutations']} label shuffles)"
+        )
     print("\n  feature means by domain")
     for name in result["features"]:
         real = result["per_domain"].get("real", {}).get(name, float("nan"))
