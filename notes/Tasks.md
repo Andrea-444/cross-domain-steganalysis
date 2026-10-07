@@ -1,7 +1,7 @@
 ---
 type: task-list
 status: active
-updated: 2026-09-04
+updated: 2026-10-07
 ---
 
 # Tasks
@@ -83,7 +83,7 @@ updated: 2026-09-04
 - [ ] Record failed and repeated runs explicitly; do not overwrite or silently omit them.
 - [ ] Aggregate repeated seeds and calculate the accepted uncertainty/statistical comparisons.
 - [ ] Review failure cases by domain, direction, embedding method, and payload.
-- [ ] Record threats to validity and known confounders.
+- [x] Record threats to validity and known confounders. Recorded in [[Methods and Findings]]; four candidate causes of the residual domain separability remain unexcluded.
 - [ ] Make final experiments reproducible from documented commands or configuration.
 - [ ] Generate final tables and figures from preserved machine-readable results.
 - [ ] Archive final manifests, configurations, metrics, and environment information.
