@@ -6,10 +6,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+from src.logging_config import get_logger
 from src.pipeline.configuration import PipelineConfiguration
 from src.pipeline.context import PipelineContext, StageRecord, utc_timestamp
 from src.pipeline.steps import DatasetStage, DetectorStage, EmbeddingStage, TrackingStage
 from src.pipeline.steps.base import PipelineStage
+
+LOGGER = get_logger(__name__)
 
 
 class PipelineRunner:
@@ -53,6 +56,7 @@ class PipelineRunner:
             )
             context.stages.append(record)
             context.persist()
+            LOGGER.info("Stage %s: start.", stage.name)
             try:
                 result = stage.execute(context)
             except Exception as error:
@@ -60,7 +64,9 @@ class PipelineRunner:
                 record.finished_at = utc_timestamp()
                 record.error = str(error)
                 context.persist()
+                LOGGER.error("Stage %s failed: %s", stage.name, error)
                 raise
+            LOGGER.info("Stage %s: completed.", stage.name)
             record.status = "completed"
             record.finished_at = utc_timestamp()
             record.outputs = result.outputs

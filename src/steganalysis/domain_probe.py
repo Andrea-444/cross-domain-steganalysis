@@ -28,6 +28,7 @@ from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from src.logging_config import configure_logging
 from src.datasets.manifest import read_manifest
 from src.evaluation.metrics import calculate_metrics
 from src.steganalysis.srnet import (
@@ -326,6 +327,7 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    configure_logging()
     args = parse_args()
     run_domain_probe(
         manifest=args.manifest,
