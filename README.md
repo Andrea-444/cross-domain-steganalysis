@@ -384,6 +384,33 @@ stego_runs/conseal_wow_p020_YYYYMMDD_HHMMSS/
 
 The manifest printed by this command is the input to the experiment runner.
 
+### Embedding history and not repeating work
+
+Pass `--cache-dir` so a condition is embedded once. Stego images are keyed by
+backend, algorithm, payload, **cohort** and seed, so re-running a condition
+reuses its images instead of regenerating them, and a different algorithm
+writes to its own cache without disturbing the first.
+
+The cohort component matters. Image IDs are stable across cohorts, so two
+cohorts prepared differently from the same sources (for example `fit` versus
+`crop`) share IDs while holding different pixels. Without the cohort key, one
+cohort would silently reuse the other's stego images and pair a stego image
+with a clean cover it was not derived from.
+
+Review what has already been embedded:
+
+```bash
+python -m src.steganography ledger --runs data/stego/runs
+
+# restricted to one cohort
+python -m src.steganography ledger \
+  --runs data/stego/runs \
+  --manifest data/processed/manifests/<name>_clean.jsonl
+```
+
+The ledger is derived from the `config.json` each run writes, so it cannot
+drift from what actually happened.
+
 ## Run Cross-Domain SRNet Experiments
 
 ```bash

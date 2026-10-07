@@ -158,3 +158,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The original justification did not hold. Indexes and selections are regenerable by `index` and `select`, they describe whatever is on one machine's disk rather than a property of the datasets, and selection manifests record absolute local paths so another machine cannot consume them. The claim that they preserved a provenance chain was also wrong on its own terms: the audit summaries reference `data/processed/manifests/*_clean.jsonl`, which was never tracked. `agent-instructions/DATA_AND_ARTIFACTS.md` already says not to commit generated artifacts merely because they are useful locally.
 - **Next step:** Unchanged. Embed on the crop cohort and run the first real four-direction experiment.
 - **Related files/results:** `.gitignore`, `notes/Decisions.md`.
+
+## 2026-10-07 — Embedding isolated per cohort; history ledger added
+
+- **Goal:** Embed the crop cohort without repeating work across methods, and make the embedding history auditable.
+- **Work completed:** The stego cache key now includes a cohort identifier derived from the clean manifest's content hash, and each run records `cohort_id` and `input_manifest_sha256`. Added `python -m src.steganography ledger`, which reports the conditions already run by reading each run's own configuration. Embedded S-UNIWARD at 0.4 bpp, seed 42, on `imagenet-flux-smoke100-crop`.
+- **Commands or experiment configuration:** `benchmark --algorithm suniward --payload-bpp 0.4 --seed 42 --cache-dir data/stego/cache`, run twice, then the same condition on the `fit` cohort.
+- **Result:** 82 tests passed. First run generated 199 stego images, the identical re-run generated 0 and reused 199. The `fit` cohort with the same algorithm, payload and seed generated all 200 rather than reusing, confirming the cohorts no longer share a cache. Verified on the crop run: zero pair-split leaks, every change exactly +/-1, and 6.3 to 10.1 per cent of pixels altered per image.
+- **Problems or surprises:** The previous cache key was backend, algorithm, payload and seed only. Since `fit` and `crop` share image IDs but differ in pixels, embedding both with one cache would have paired stego images with covers they were not derived from, silently. No such run had been made, so no existing artifact is affected.
+- **Next step:** Run the four-direction SRNet experiment on the embedded crop cohort. This is the first real test of whether the detector learns embedding traces, as opposed to the domain signal already measured by the probe.
+- **Related files/results:** `src/steganography/core.py`, `tests/steganography/test_cohort_isolation.py`.

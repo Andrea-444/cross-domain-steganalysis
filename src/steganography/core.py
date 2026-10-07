@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -103,6 +104,56 @@ def timestamped_run_dir(output: str | Path, label: str) -> Path:
     return path
 
 
+def cohort_identifier(manifest: str | Path, length: int = 12) -> str:
+    """Short content hash of a clean manifest.
+
+    Image IDs are stable across cohorts, so two cohorts prepared differently
+    from the same sources share them while holding different pixels. Keying the
+    stego cache on image_id alone would let one cohort silently reuse the
+    other's stego images, pairing a stego image with a clean cover it was not
+    derived from. The cohort identifier keeps their caches apart.
+    """
+    digest = hashlib.sha256()
+    with open(manifest, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:length]
+
+
+def embedding_ledger(
+    runs_directory: str | Path, cohort_id: str | None = None
+) -> list[dict[str, object]]:
+    """Report which embedding conditions have already been run.
+
+    Reads the configuration each run writes, so the history is derived from the
+    runs themselves rather than from separate bookkeeping that could drift.
+    """
+    runs_directory = Path(runs_directory)
+    if not runs_directory.is_dir():
+        return []
+    entries: list[dict[str, object]] = []
+    for config_path in sorted(runs_directory.glob("*/config.json")):
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if cohort_id is not None and config.get("cohort_id") != cohort_id:
+            continue
+        entries.append({
+            "run_dir": str(config_path.parent.resolve()),
+            "cohort_id": config.get("cohort_id"),
+            "backend": config.get("backend"),
+            "algorithm": config.get("algorithm"),
+            "payload_bpp": config.get("payload_bpp"),
+            "seed": config.get("seed"),
+            "record_count": config.get("record_count"),
+            "generated_count": config.get("generated_count"),
+            "reused_count": config.get("reused_count"),
+            "input_manifest": config.get("input_manifest"),
+        })
+    return entries
+
+
 def benchmark_manifest(
     manifest: str | Path,
     algorithm: str,
@@ -130,7 +181,12 @@ def benchmark_manifest(
     payload_label = f"p{int(round(payload_bpp * 100)):03d}"
     label = f"{backend}_{algorithm}_{payload_label}"
     run_dir = timestamped_run_dir(output, label)
-    cache_root = Path(cache_dir) / label / f"seed_{seed}" if cache_dir else None
+    cohort_id = cohort_identifier(manifest)
+    cache_root = (
+        Path(cache_dir) / label / f"cohort_{cohort_id}" / f"seed_{seed}"
+        if cache_dir
+        else None
+    )
     stego_records: list[dict[str, object]] = []
     generated_count = 0
     reused_count = 0
@@ -202,6 +258,8 @@ def benchmark_manifest(
         "payload_bpp": payload_bpp,
         "seed": seed,
         "input_manifest": str(Path(manifest).resolve()),
+        "input_manifest_sha256": cohort_identifier(manifest, length=64),
+        "cohort_id": cohort_id,
         "limit_per_domain": limit_per_domain,
         "record_count": len(records),
         "generated_count": generated_count,
@@ -398,6 +456,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    ledger = subparsers.add_parser(
+        "ledger",
+        help="List embedding conditions already run, so work is not repeated.",
+    )
+    ledger.add_argument("--runs", default="data/stego/runs")
+    ledger.add_argument(
+        "--manifest",
+        default=None,
+        help="Restrict to runs for this clean manifest's cohort.",
+    )
+
     setup = subparsers.add_parser("setup-openstego")
     setup.add_argument("--output", default="external/openstego")
 
@@ -432,6 +501,31 @@ def main() -> None:
             cache_dir=args.cache_dir,
             limit_per_domain=args.limit_per_domain,
         )
+    elif args.command == "ledger":
+        cohort = cohort_identifier(args.manifest) if args.manifest else None
+        entries = embedding_ledger(args.runs, cohort_id=cohort)
+        if cohort:
+            print(f"Cohort {cohort} ({Path(args.manifest).name})")
+        if not entries:
+            print("No embedding runs recorded.")
+            return
+        print(
+            f"{'algorithm':<12}{'bpp':>6}{'seed':>6}{'covers':>8}"
+            f"{'new':>6}{'reused':>8}  cohort       run"
+        )
+        for entry in entries:
+            print(
+                f"{str(entry['algorithm']):<12}"
+                f"{str(entry['payload_bpp']):>6}"
+                f"{str(entry['seed']):>6}"
+                f"{str(entry['record_count']):>8}"
+                f"{str(entry['generated_count']):>6}"
+                f"{str(entry['reused_count']):>8}"
+                f"  {str(entry['cohort_id'] or '-'):<12} "
+                f"{Path(str(entry['run_dir'])).name}"
+            )
+        print(f"\n{len(entries)} run(s). Re-running a listed condition reuses its cache.")
+        return
     elif args.command == "setup-openstego":
         setup_openstego(args.output)
     elif args.command == "embed":
