@@ -68,7 +68,46 @@ Chance is 0.5 balanced accuracy. A near-chance probe result is only meaningful
 alongside a positive-control cohort the probe *does* detect, since a null may
 instead mean the probe lacked power.
 
-### 1.3 Measured results
+### 1.3 Measured results at full scale (authoritative)
+
+Cohort: `imagenet-flux-6000-crop-balanced`, 5,830 covers per domain, 1,000
+classes. SRNet probe: 3 seeds, 30 epochs, batch 32, CUDA, 66 minutes. Test
+split 1,948 covers (974 per domain).
+
+| Metric | Value |
+|---|---|
+| Balanced accuracy | **0.9954** (sd 0.0007) |
+| ROC-AUC | **0.9997** (sd 0.0001) |
+| Per-seed balanced accuracy | 0.9959, 0.9944, 0.9959 |
+| Errors per seed | 8, 11, 8 of 1,948 |
+| Selected epochs | 29, 23, 25 |
+
+Artifact: `results/audits/srnet-probe-6000-crop-balanced/summary.json`.
+
+**Interpretation.** The two cover domains are near-perfectly separable from
+clean covers alone, after crop-only preprocessing and after domain rebalancing.
+This is consistent with the sources rather than surprising: GenImage++ is
+published as a benchmark **for** AI-image detection, so separability is a design
+property of the data.
+
+Consequences, stated precisely:
+
+- Research question 1 (`ai_to_ai` against `real_to_real`) is **unaffected**.
+  Domain separability says nothing about clean-versus-stego detection inside a
+  single domain.
+- Research question 2 (`real_to_ai`) remains measurable, but a transfer failure
+  occurs across a near-maximal domain gap. Attributing it to steganographic
+  traces differing between domains, rather than to ordinary distribution shift,
+  requires a further control that this design does not currently provide.
+
+### 1.4 Measured results at 100 covers per domain (superseded)
+
+> [!warning] These figures understate the domain gap
+> At 132 training covers the probe was limited by sample size, not by the data.
+> The `crop` figure of 0.675 below becomes 0.9954 at 5,830 covers per domain.
+> Retained because the preprocessing and compression comparisons were only ever
+> run at this scale.
+
 
 Cohort: 100 covers per domain, 100 ImageNet classes, split 66/17/17 per domain.
 SRNet probe: 3 seeds, 30 epochs, batch 16, MPS. Test split 33-34 covers.
@@ -98,10 +137,15 @@ Feature means under `fit` versus `crop`:
 Artifacts: `results/audits/srnet-probe-{fit,crop,smoke100-crop-jpegai96,smoke100-crop-jpegboth96}/summary.json`
 and `results/audits/imagenet-flux-smoke100{,-crop}_domain_separability.json`.
 
-### 1.4 Interpretation
+### 1.5 Interpretation of the small-scale comparison
 
-- Removing resampling reduced separability by about 0.07 balanced accuracy.
-  **The resampling mismatch was a genuine, measurable confound.**
+- Removing resampling reduced separability by about 0.07 balanced accuracy at
+  this scale. **At full scale the probe saturates (0.9954 for `crop` alone), so
+  it can no longer discriminate between the two preprocessing paths.** The
+  crop-only decision therefore rests on removing a known processing artifact —
+  unequal and sometimes magnifying resampling — rather than on this measured
+  difference. Running the `fit` probe at full scale would be uninformative,
+  since both variants sit at the ceiling.
 - The three compression variants (0.6752, 0.6605, 0.6875) lie within roughly
   one standard deviation of each other. **Equalizing compression history had no
   measurable effect.**
@@ -114,7 +158,7 @@ and `results/audits/imagenet-flux-smoke100{,-crop}_domain_separability.json`.
   structure is **contradicted**: a native crop would have preserved a generator
   artifact. It was produced by the exact-4x LANCZOS downsampling.
 
-### 1.5 Methodological finding worth reporting
+### 1.6 Methodological finding worth reporting
 
 **The feature screen produced false negatives.** It scored the three
 crop-based variants at 0.5324, 0.5020 and 0.4970 with permutation p-values of
@@ -142,9 +186,15 @@ confounders."
 
 ### Statistical power
 
-- Domain-probe test splits held 33-34 covers, so one prediction moves balanced
-  accuracy by about three percentage points.
-- Three seeds give a coarse standard-deviation estimate.
+- **This caveat was borne out.** The 100-cover probe reported 0.675; the same
+  probe at 5,830 covers per domain reports 0.9954. The small-scale figure
+  measured the limit of 132 training covers, not the domain gap. Treat every
+  remaining small-scale number in this note as a lower bound only.
+- Domain-probe test splits at 100 covers per domain held 33-34 covers, so one
+  prediction moved balanced accuracy by about three percentage points. The
+  full-scale split holds 1,948.
+- Three seeds give a coarse standard-deviation estimate, though at full scale
+  the spread is very small (sd 0.0007).
 - The feature screen's permutation test used 200 shuffles; the SRNet probe has
   **no significance test**, only seed-to-seed spread.
 
