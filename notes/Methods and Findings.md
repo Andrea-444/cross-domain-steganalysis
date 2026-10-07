@@ -38,10 +38,19 @@ in ways that touch the exact signal a steganalyzer reads:
 | Format | JPEG, lossy | PNG, lossless |
 | Source JPEG quality | median 96 (86 of 100 covers at 96) | not applicable |
 | Dimensions | 50 distinct in a 100-cover sample, mostly 500x375 | uniformly 1024x1024 |
-| Downsample factor to 256 | about 1.95x | exactly 4x |
+| Downsample factor to 256 under `fit` | median 1.46x, mean 1.66x, range 0.66x to 7.59x | exactly 4.00x |
 
 Resampling attenuates high-frequency residuals; unequal factors attenuate the
 domains unequally. JPEG quantization disturbs the same band.
+
+`ImageOps.fit` crops to the target aspect ratio using the short side and then
+resamples, so the factor is governed by the short side rather than the long
+one. Two consequences are easy to miss. A factor below 1.0 means the cover was
+**enlarged**, and interpolation invents high-frequency content rather than
+attenuating it; 100-cover measurement puts the natural minimum at 0.66x. And
+the factor ranged from 0.66x to 7.59x **within** the natural domain, so `fit`
+applied inconsistent resampling across natural covers as well as unequal
+resampling between domains.
 
 ### 1.2 Method
 
