@@ -28,7 +28,7 @@ from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
-from src.logging_config import configure_logging
+from src.logging_config import ProgressReporter, configure_logging, get_logger
 from src.datasets.manifest import read_manifest
 from src.evaluation.metrics import calculate_metrics
 from src.steganalysis.srnet import (
@@ -40,6 +40,9 @@ from src.steganalysis.srnet import (
 
 
 DOMAIN_LABELS = {"real": 0, "ai": 1}
+
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass
@@ -120,6 +123,9 @@ def train_domain_model(
         model.train()
         train_loss = 0.0
         seen = 0
+        progress = ProgressReporter(
+            LOGGER, total=len(train_loader.dataset), label=f"probe epoch {epoch}"
+        )
         for images, labels, _ in train_loader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -128,6 +134,8 @@ def train_domain_model(
             optimizer.step()
             train_loss += loss.item() * labels.size(0)
             seen += labels.size(0)
+            progress.advance(labels.size(0))
+        progress.finish()
 
         model.eval()
         val_loss = 0.0
@@ -152,7 +160,7 @@ def train_domain_model(
                 "val_balanced_accuracy": float(metrics["balanced_accuracy"]),
             }
         )
-        print(
+        LOGGER.info(
             f"  seed={seed} epoch={epoch}/{epochs} "
             f"train_loss={train_loss / max(seen, 1):.4f} "
             f"val_loss={average_val_loss:.4f} "
@@ -219,7 +227,7 @@ def run_domain_probe(
     resolved_device: str | None = None
 
     for seed in seeds:
-        print(f"\nDomain probe seed {seed}")
+        LOGGER.info(f"\nDomain probe seed {seed}")
         outcome = train_domain_model(
             records=records,
             seed=seed,
@@ -303,10 +311,10 @@ def run_domain_probe(
         },
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print("\nSRNet domain separability")
+    LOGGER.info("\nSRNet domain separability")
     for key, value in summary["aggregate"].items():
-        print(f"  {key:<28} {value:.3f}")
-    print(f"  Results: {output.resolve()}")
+        LOGGER.info(f"  {key:<28} {value:.3f}")
+    LOGGER.info(f"  Results: {output.resolve()}")
     return output
 
 

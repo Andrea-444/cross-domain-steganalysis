@@ -27,6 +27,10 @@ from pathlib import Path
 from PIL import Image
 
 from src.datasets.manifest import read_manifest, write_manifest
+from src.logging_config import get_logger
+
+
+LOGGER = get_logger(__name__)
 
 
 def jpeg_roundtrip(image: Image.Image, quality: int) -> Image.Image:
@@ -127,5 +131,5 @@ def run(args: argparse.Namespace) -> Path:
         quality=args.quality,
         domains=args.domains,
     )
-    print(f"Manifest: {path.resolve()}")
+    LOGGER.info(f"Manifest: {path.resolve()}")
     return path

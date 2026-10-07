@@ -60,7 +60,7 @@ def _configure_mipod_cache(cl, cache_root: Path) -> None:
     def load_lookup_table():
         if lookup_path.exists():
             return np.load(lookup_path)["ixlnx3"]
-        print("Preparing MiPOD lookup table. This one-time step can take a few minutes.")
+        LOGGER.info("Preparing MiPOD lookup table. This one-time step can take a few minutes.")
         values = definitions.prepare_lookup_table(max_val=1000, resolution=100)
         np.savez(lookup_path, ixlnx3=values)
         return values
@@ -340,7 +340,7 @@ def setup_openstego(output: str | Path = "external/openstego") -> Path:
     destination = output / "openstego.jar"
     shutil.copy2(jars[0], destination)
     (output / "VERSION").write_text(str(release.get("tag_name", "unknown")), encoding="utf-8")
-    print(f"OpenStego installed at: {destination.resolve()}")
+    LOGGER.info(f"OpenStego installed at: {destination.resolve()}")
     return destination
 
 
@@ -411,7 +411,7 @@ def openstego_embed(
     subprocess.run(command, check=True)
     if not output.exists():
         raise RuntimeError("OpenStego did not create the requested stego file.")
-    print(f"Recoverable stego image: {output.resolve()}")
+    LOGGER.info(f"Recoverable stego image: {output.resolve()}")
     return output
 
 
@@ -441,7 +441,7 @@ def openstego_extract(
     after = {path.resolve() for path in output_dir.iterdir()}
     if not after - before:
         raise RuntimeError("OpenStego did not extract a payload file.")
-    print(f"Extracted payload directory: {output_dir.resolve()}")
+    LOGGER.info(f"Extracted payload directory: {output_dir.resolve()}")
     return output_dir
 
 
@@ -525,16 +525,16 @@ def main() -> None:
         cohort = cohort_identifier(args.manifest) if args.manifest else None
         entries = embedding_ledger(args.runs, cohort_id=cohort)
         if cohort:
-            print(f"Cohort {cohort} ({Path(args.manifest).name})")
+            LOGGER.info(f"Cohort {cohort} ({Path(args.manifest).name})")
         if not entries:
-            print("No embedding runs recorded.")
+            LOGGER.info("No embedding runs recorded.")
             return
-        print(
+        LOGGER.info(
             f"{'algorithm':<12}{'bpp':>6}{'seed':>6}{'covers':>8}"
             f"{'new':>6}{'reused':>8}  cohort       run"
         )
         for entry in entries:
-            print(
+            LOGGER.info(
                 f"{str(entry['algorithm']):<12}"
                 f"{str(entry['payload_bpp']):>6}"
                 f"{str(entry['seed']):>6}"
@@ -544,7 +544,7 @@ def main() -> None:
                 f"  {str(entry['cohort_id'] or '-'):<12} "
                 f"{Path(str(entry['run_dir'])).name}"
             )
-        print(f"\n{len(entries)} run(s). Re-running a listed condition reuses its cache.")
+        LOGGER.info(f"\n{len(entries)} run(s). Re-running a listed condition reuses its cache.")
         return
     elif args.command == "setup-openstego":
         setup_openstego(args.output)

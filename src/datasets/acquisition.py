@@ -24,9 +24,13 @@ from pathlib import Path
 from datasets import Image as DatasetsImage
 from datasets import load_dataset, load_dataset_builder
 from huggingface_hub import hf_hub_download
+from src.logging_config import get_logger
 
 
 DEFAULT_EXTENSION = ".jpg"
+
+
+LOGGER = get_logger(__name__)
 
 
 def fetch_repo_file(
@@ -232,7 +236,7 @@ def run(args: argparse.Namespace) -> Path:
             output=args.output,
             revision=args.revision,
         )
-        print(f"Archive: {path.resolve()}")
+        LOGGER.info(f"Archive: {path.resolve()}")
         return path
     if args.command == "fetch-labels":
         path = fetch_class_labels(
@@ -241,7 +245,7 @@ def run(args: argparse.Namespace) -> Path:
             output=args.output,
             revision=args.revision,
         )
-        print(f"Labels: {path.resolve()}")
+        LOGGER.info(f"Labels: {path.resolve()}")
         return path
     path = stream_images(
         repo_id=args.repo,
@@ -254,5 +258,5 @@ def run(args: argparse.Namespace) -> Path:
     )
     total = sum(1 for item in path.rglob("*") if item.is_file())
     classes = sum(1 for item in path.iterdir() if item.is_dir())
-    print(f"Streamed {total} images across {classes} classes into {path.resolve()}")
+    LOGGER.info(f"Streamed {total} images across {classes} classes into {path.resolve()}")
     return path

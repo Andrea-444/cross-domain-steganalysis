@@ -218,3 +218,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Two defects appeared during the work. The first was mine: `LOGGER` was never defined in `src/steganography/core.py`, because an insertion anchor did not match, and six tests failed. The second was a design conflict. `success_line` embeds color in the message text, so it bypasses the formatter's terminal check and leaked escape codes into captured output. Those helpers now consult `color_enabled()` separately. A fixed 500-item interval also gave no output at all on a short run, so the interval now derives from the total.
 - **Next step:** Convert the remaining `print()` calls in `src/datasets/` and `src/steganalysis/` to the logger. `src/legacy/` stays unchanged.
 - **Related files/results:** `src/logging_config.py`, `tests/logging/test_logging_config.py`, `agent-instructions/DEVELOPMENT_WORKFLOW.md`.
+
+## 2026-10-07 — Logger applied across every command
+
+- **Goal:** Report progress and status in every command, not only in embedding and preparation.
+- **Work completed:** Converted the remaining 50 `print()` calls in `src/datasets/`, `src/steganalysis/` and `src/steganography/` to the project logger. `src/legacy/` stays unchanged. Added batch progress inside each training epoch in `src/steganalysis/srnet.py` and `src/steganalysis/domain_probe.py`. Added the logger to `src/datasets/extractor.py`.
+- **Commands or experiment configuration:** A two-epoch `experiments` run on the 198-cover S-UNIWARD cohort.
+- **Result:** 108 tests passed. Each training epoch now reports images processed, percentage, rate and remaining minutes. An epoch on 7,770 covers previously printed one line at its end.
+- **Problems or surprises:** My first conversion pass skipped three files. The check asked whether the file imported anything from `src.logging_config`, and those three already imported `configure_logging`, so `get_logger` was never added and the modules failed to import. Also recorded: Andrea's embedding run on the GPU machine finished and generated all 11,660 stego images for cohort `1c232642a387`, S-UNIWARD at 0.4 bpp, seed 42.
+- **Next step:** Push the two unpushed commits once GitHub recovers, then run the four-direction experiment on the embedded cohort.
+- **Related files/results:** `src/logging_config.py`, `src/steganalysis/srnet.py`, `src/steganalysis/domain_probe.py`.

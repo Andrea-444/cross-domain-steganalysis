@@ -22,7 +22,7 @@ from src.datasets.recompress import run as run_recompress
 from src.datasets.audit import run as run_audit
 from src.datasets.acquisition import run as run_acquisition
 from src.datasets.class_mapping import build_genimagepp_class_maps
-from src.logging_config import configure_logging
+from src.logging_config import configure_logging, get_logger
 from src.datasets.manifest import stable_id, write_manifest
 from src.datasets.selection import create_selection_manifest
 
@@ -43,6 +43,9 @@ GENIMAGE_GENERATORS = {
     "vqdm": "VQDM/",
     "wukong": "wukong/",
 }
+
+
+LOGGER = get_logger(__name__)
 
 
 def list_images(root: str | Path) -> list[Path]:
@@ -147,9 +150,9 @@ def prepare_domains(
 
     manifest_path = output / "manifests" / f"{name}_clean.jsonl"
     write_manifest(manifest_path, sorted(records, key=lambda record: str(record["image_id"])))
-    print(f"Prepared {balanced_count} real and {balanced_count} AI covers.")
-    print(f"Processed data: {dataset_root.resolve()}")
-    print(f"Manifest: {manifest_path.resolve()}")
+    LOGGER.info(f"Prepared {balanced_count} real and {balanced_count} AI covers.")
+    LOGGER.info(f"Processed data: {dataset_root.resolve()}")
+    LOGGER.info(f"Manifest: {manifest_path.resolve()}")
     return manifest_path
 
 
@@ -236,7 +239,7 @@ def download_genimage(
         destination = generator_root / Path(file.path).name
         if destination.exists():
             continue
-        print(f"Downloading {file.path}")
+        LOGGER.info(f"Downloading {file.path}")
         result = gdown.download(id=file.id, output=str(destination), quiet=False)
         if result is None:
             raise RuntimeError(f"Failed to download {file.path}")
@@ -438,8 +441,8 @@ def main() -> None:
             class_index=args.class_index,
             output=args.output,
         )
-        print(f"Real class map: {real_map.resolve()}")
-        print(f"AI class map: {ai_map.resolve()}")
+        LOGGER.info(f"Real class map: {real_map.resolve()}")
+        LOGGER.info(f"AI class map: {ai_map.resolve()}")
         return
 
     if args.command == "prepare-selection":
@@ -453,7 +456,7 @@ def main() -> None:
             mode=args.preprocess,
             skip_undersized=args.skip_undersized,
         )
-        print(f"Manifest: {path.resolve()}")
+        LOGGER.info(f"Manifest: {path.resolve()}")
         return
 
     if args.command == "index":
@@ -469,7 +472,7 @@ def main() -> None:
             infer_class_from_parent=not args.no_parent_class,
             allow_unclassified=args.allow_unclassified,
         )
-        print(f"Dataset index: {path.resolve()}")
+        LOGGER.info(f"Dataset index: {path.resolve()}")
         return
 
     if args.command == "select":
@@ -484,7 +487,7 @@ def main() -> None:
             train_ratio=args.train_ratio,
             val_ratio=args.val_ratio,
         )
-        print(f"Selection manifest: {path.resolve()}")
+        LOGGER.info(f"Selection manifest: {path.resolve()}")
         return
 
     if args.command == "extract":
@@ -495,7 +498,7 @@ def main() -> None:
             extraction_manifest=args.extraction_manifest,
             materialization=args.materialization,
         )
-        print(json.dumps(result, indent=2))
+        LOGGER.info(json.dumps(result, indent=2))
         return
 
     if args.command == "prepare":
@@ -529,8 +532,8 @@ def main() -> None:
             preferred_split=args.split if args.source == "genimage" else None,
         )
     except ValueError:
-        print(f"Downloaded to {downloaded.resolve()}.")
-        print("Run `python -m src.datasets prepare` with explicit domain folders.")
+        LOGGER.info(f"Downloaded to {downloaded.resolve()}.")
+        LOGGER.info("Run `python -m src.datasets prepare` with explicit domain folders.")
         return
 
     name = "kaggle" if args.source == "kaggle" else f"genimage_{args.generator}"

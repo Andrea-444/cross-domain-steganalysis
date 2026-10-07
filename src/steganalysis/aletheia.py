@@ -5,16 +5,20 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from src.logging_config import get_logger
 
 
 ALETHEIA_REPOSITORY = "https://github.com/daniellerch/aletheia.git"
 ALETHEIA_VERSION = "v0.3"
 
 
+LOGGER = get_logger(__name__)
+
+
 def setup_aletheia(output: str | Path = "external/aletheia") -> Path:
     output = Path(output)
     if (output / "aletheia.py").exists():
-        print(f"Aletheia already exists at: {output.resolve()}")
+        LOGGER.info(f"Aletheia already exists at: {output.resolve()}")
         return output
     output.parent.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
@@ -33,7 +37,7 @@ def setup_aletheia(output: str | Path = "external/aletheia") -> Path:
         check=True,
         env=environment,
     )
-    print(f"Aletheia {ALETHEIA_VERSION} cloned to: {output.resolve()}")
+    LOGGER.info(f"Aletheia {ALETHEIA_VERSION} cloned to: {output.resolve()}")
     return output
 
 
