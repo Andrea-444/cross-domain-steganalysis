@@ -168,3 +168,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The previous cache key was backend, algorithm, payload and seed only. Since `fit` and `crop` share image IDs but differ in pixels, embedding both with one cache would have paired stego images with covers they were not derived from, silently. No such run had been made, so no existing artifact is affected.
 - **Next step:** Run the four-direction SRNet experiment on the embedded crop cohort. This is the first real test of whether the detector learns embedding traces, as opposed to the domain signal already measured by the probe.
 - **Related files/results:** `src/steganography/core.py`, `tests/steganography/test_cohort_isolation.py`.
+
+## 2026-10-07 — Consolidated methods and findings record for thesis writing
+
+- **Goal:** Pull the methodological decisions and their supporting numbers into one place usable when writing the thesis, rather than leaving them spread across log entries, decision records, README tables and result JSON.
+- **Work completed:** Added [[Methods and Findings]]. It carries the confound investigation with exact figures read from the result artifacts, the per-seed values, the feature means, the false-negative finding about the cheap screen, a threats-to-validity section, the pipeline provenance summary, and the reproduction commands. Measured observations and interpretation are separated throughout, per `agent-instructions/RESULTS_AND_WRITING.md`.
+- **Commands or experiment configuration:** No experiment run; figures were read from `results/audits/*/summary.json` rather than transcribed from memory.
+- **Result:** The note states prominently that no experimental result exists yet and that every figure in it comes from methodological validation rather than the research protocol. It also addresses the open [[Tasks]] item on recording threats to validity.
+- **Problems or surprises:** None. Four candidate causes of the residual domain separability remain unexcluded and are listed rather than glossed: semantic content, generation resolution, tonal statistics under grayscale conversion, and single-generator scope.
+- **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only, gate it with the probe, then run the first four-direction experiment.
+- **Related files/results:** `notes/Methods and Findings.md`.
