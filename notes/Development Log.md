@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-09-29
+updated: 2026-10-07
 ---
 
 # Development Log
@@ -138,3 +138,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The three-feature audit was fooled again, and more completely than before: it scored the two recompressed variants at 0.502 and 0.497 with permutation p of 0.54 and 0.60, while SRNet separated the same covers at 0.661 and 0.688. It should not be used as a gate. The substantive finding is that the residual separability survives compression equalization, so it is most likely an intrinsic property of FLUX-generated images rather than a preprocessing artifact. That is an inference from one failed intervention, not proof: semantic content, generation resolution, and tonal statistics remain untested as alternative explanations. The test split is only 33 to 34 covers, so each prediction moves balanced accuracy by about three points.
 - **Next step:** Record a preprocessing decision in [[Decisions]]. The evidence supports crop-only, since it removed a real resampling confound, and does not support adding JPEG to the AI covers, since it changed nothing measurable. Whether an intrinsic domain separability of about 0.675 is acceptable for the thesis is a protocol judgement and remains open.
 - **Related files/results:** `src/datasets/recompress.py`, `results/audits/srnet-probe-smoke100-crop-jpegai96/`, `results/audits/srnet-probe-smoke100-crop-jpegboth96/`.
+
+## 2026-10-07 — Preprocessing decisions recorded; duplicate branch retired
+
+- **Goal:** Record the preprocessing and gating conclusions in [[Decisions]] so a second machine reads them as accepted, and remove the superseded duplicate branch.
+- **Work completed:** Added three accepted entries to [[Decisions]]: normalize by native crop without resampling, do not equalize compression history, and gate cohorts with the SRNet probe rather than the three-feature screen. Updated the provisional preprocessing row in [[Experiment Decisions]] and removed its now-settled crop/resize open item. Deleted the remote branch `feat/imagenet-genimagepp-class-matched-cohort`.
+- **Commands or experiment configuration:** No experiment run; notes and branch housekeeping only.
+- **Result:** `origin` now carries only `dev` and `main`. The deleted branch held one commit, `6731390`, an independent implementation of the class-mapping and preparation workflow that `c09bea2` on `dev` had already superseded. It is recoverable by that SHA if ever needed.
+- **Problems or surprises:** None. Note that [[Experiment Decisions]] still lists "Confirm the accessible ImageNet validation archive and its download size" as open, although the gated `ILSVRC/imagenet-1k` streaming path is settled and documented in `README.md`. That item was already stale before this change and was left for the user rather than edited silently.
+- **Next step:** Embed on the crop cohort and run the first real four-direction experiment. SRNet convergence on embedding traces at realistic scale is still unmeasured.
+- **Related files/results:** `notes/Decisions.md`, `notes/Experiment Decisions.md`.

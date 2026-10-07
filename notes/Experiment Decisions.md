@@ -3,7 +3,7 @@ type: concise-decision-sheet
 status: active
 phase: initial-design
 protocol-frozen: false
-updated: 2026-09-01
+updated: 2026-10-07
 ---
 
 # Experiment Decisions
@@ -22,7 +22,7 @@ updated: 2026-09-01
 | Starting size | Prefer 6,000 covers per domain. Reduce or increase after a pilot. |
 | Matching | Match class counts between domains; natural and AI images are not one-to-one pairs. |
 | Splitting | Split covers before embedding. Every clean/stego twin stays in the same split. |
-| Preprocessing | Use the same crop, grayscale conversion, dimensions, and lossless output format for both domains. Prefer crop-only; confirm after checking source dimensions. |
+| Preprocessing | Centred native crop to 256x256 grayscale PNG for both domains, with no resampling (`--preprocess crop`). Accepted 2026-10-07 after the domain probe measured a resampling confound; see [[Decisions]]. |
 | Self-generation | Optional only if suitable external GPU access becomes available. |
 | Embedding library | Keep the tested `conseal==2024.12` pin for simulated adaptive embedding. Validate deliberately before any upgrade. |
 | Primary detector | Use the existing external PyTorch SRNet implementation pinned at commit `2c838cf7d26dd0b8e45eda79ebf103ca312c0355`; load it through `src/steganalysis/srnet.py` instead of rewriting SRNet. |
@@ -47,7 +47,6 @@ If all 1,000 ImageNet classes are used, 6,000 images means 6 images per class pe
 
 - Use all 1,000 classes or a justified subset.
 - Confirm the accessible ImageNet validation archive and its download size.
-- Final crop/resize rule after the dimension audit.
 - Finalize the detector choice after an SRNet convergence pilot and a `sealwatch` compatibility/speed test.
 - Metrics, statistics, and cross-domain test matrix.
 
