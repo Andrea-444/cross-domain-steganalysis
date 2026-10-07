@@ -15,6 +15,8 @@ from src.datasets.extractor import extract_selection_stage
 from src.datasets.index import build_dataset_index
 from src.datasets.acquisition import add_arguments as add_acquisition_arguments
 from src.datasets.audit import add_arguments as add_audit_arguments
+from src.datasets.rebalance import add_arguments as add_rebalance_arguments
+from src.datasets.rebalance import run as run_rebalance
 from src.datasets.recompress import add_arguments as add_recompress_arguments
 from src.datasets.recompress import run as run_recompress
 from src.datasets.audit import run as run_audit
@@ -319,6 +321,7 @@ def parse_args() -> argparse.Namespace:
     add_acquisition_arguments(subparsers)
     add_audit_arguments(subparsers)
     add_recompress_arguments(subparsers)
+    add_rebalance_arguments(subparsers)
 
     prepare = subparsers.add_parser("prepare", help="Normalize two local domain folders.")
     prepare.add_argument("--real-src", required=True)
@@ -408,6 +411,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.command == "rebalance-cohort":
+        run_rebalance(args)
+        return
+
     if args.command == "recompress-cohort":
         run_recompress(args)
         return

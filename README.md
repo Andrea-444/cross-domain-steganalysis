@@ -491,6 +491,30 @@ features, while SRNet may exploit differences they do not capture. On the
 first cohort audited it **did** give a false all-clear, so treat it as a cheap
 screen and confirm any pass with the SRNet probe below.
 
+### Rebalancing after skipped covers
+
+Crop-only cannot fill the target size from a smaller source, and the loss is
+one-sided: natural covers vary in resolution while AI covers are uniformly
+large. On the 6,000-per-domain ImageNet/GenImage++ cohort, 170 natural covers
+were below 256 px on the short side, leaving 5,830 natural against 6,000 AI and
+98 of 1,000 classes unmatched.
+
+```bash
+python -m src.datasets rebalance-cohort \
+  --manifest data/processed/manifests/<name>_clean.jsonl \
+  --name <name>-balanced --output data/processed
+```
+
+Matching is applied per class **and** per split, since splits are locked at
+selection time and a cover must never move between them. This is a
+manifest-only operation: no image is read or written, and `clean_path` values
+are unchanged.
+
+Unequal domain totals matter beyond the recorded class-matching rule. They
+would give the two detectors different amounts of training data, so a
+`real_to_real` versus `ai_to_ai` difference could reflect training-set size
+rather than domain difficulty.
+
 ### SRNet domain probe
 
 Ask the detector itself the same question, using clean covers only:

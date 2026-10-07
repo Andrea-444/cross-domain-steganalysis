@@ -188,3 +188,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Two findings that strengthen the crop-only decision rather than weaken it. A minimum of 0.66x means some natural covers were **enlarged** under `fit`, and interpolation invents high-frequency content instead of attenuating it, which is worse for a steganalyzer than smoothing. And the factor varied from 0.66x to 7.59x *within* the natural domain, so `fit` applied inconsistent resampling across natural covers as well as unequal resampling between domains. The measured separability figures are unaffected; only the explanatory factor was misquoted.
 - **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only.
 - **Related files/results:** `README.md`, `notes/Decisions.md`, `notes/Methods and Findings.md`.
+
+## 2026-10-07 — Cohort rebalancing after one-sided skip
+
+- **Goal:** Restore per-class domain matching after crop-only preprocessing dropped undersized natural covers from the 6,000-per-domain cohort.
+- **Work completed:** Added `src/datasets/rebalance.py` and the `rebalance-cohort` command. It equalizes domain counts per class **and** per split, choosing which surplus cover to drop deterministically by sorted `image_id`, and records every dropped cover in the run configuration.
+- **Commands or experiment configuration:** `rebalance-cohort --manifest data/processed/manifests/imagenet-flux-smoke100-crop_clean.jsonl --name smoke100-crop-balanced`.
+- **Result:** 89 tests passed. On the GPU machine's full cohort, crop-only kept 11,830 of 12,000 covers: 170 natural covers were under 256 px on the short side, all on the natural side, leaving 5,830 against 6,000 and 98 of 1,000 classes unmatched. Verified locally on the 199-cover crop cohort: 198 kept, 1 AI cover dropped, zero class-and-split mismatches remaining.
+- **Problems or surprises:** The imbalance matters for a reason beyond the recorded class-matching rule. Unequal domain totals would have given the real-trained and AI-trained detectors different training-set sizes (3,887 against 4,000 covers), so a `real_to_real` versus `ai_to_ai` difference could have reflected data volume rather than domain difficulty. Also worth recording for future cohorts: about 2.8 per cent of ImageNet validation covers are below 256 px on the short side, and the index stores `size_bytes` but not dimensions, so these cannot yet be filtered at selection time, which is where the fix belongs.
+- **Next step:** Rebalance the full cohort, gate it with the SRNet domain probe at full scale, then embed and run the four-direction protocol.
+- **Related files/results:** `src/datasets/rebalance.py`, `tests/datasets/test_rebalance.py`.
