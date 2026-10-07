@@ -148,3 +148,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** None. Note that [[Experiment Decisions]] still lists "Confirm the accessible ImageNet validation archive and its download size" as open, although the gated `ILSVRC/imagenet-1k` streaming path is settled and documented in `README.md`. That item was already stale before this change and was left for the user rather than edited silently.
 - **Next step:** Embed on the crop cohort and run the first real four-direction experiment. SRNet convergence on embedding traces at realistic scale is still unmeasured.
 - **Related files/results:** `notes/Decisions.md`, `notes/Experiment Decisions.md`.
+
+## 2026-10-07 — Untracked the regenerable data artifacts
+
+- **Goal:** Correct yesterday's decision to track dataset indexes and selection manifests.
+- **Work completed:** Removed `data/indexes/` and `data/selections/` from version control with `git rm --cached`, leaving the files in place on disk. Kept the class maps and the audit summaries. Rewrote the `.gitignore` comments, which had recorded the reasoning that this change reverses.
+- **Commands or experiment configuration:** No experiment run.
+- **Result:** Nine files and about 6,350 lines removed from the repository. Three class-map files and six audit summaries remain tracked.
+- **Problems or surprises:** The original justification did not hold. Indexes and selections are regenerable by `index` and `select`, they describe whatever is on one machine's disk rather than a property of the datasets, and selection manifests record absolute local paths so another machine cannot consume them. The claim that they preserved a provenance chain was also wrong on its own terms: the audit summaries reference `data/processed/manifests/*_clean.jsonl`, which was never tracked. `agent-instructions/DATA_AND_ARTIFACTS.md` already says not to commit generated artifacts merely because they are useful locally.
+- **Next step:** Unchanged. Embed on the crop cohort and run the first real four-direction experiment.
+- **Related files/results:** `.gitignore`, `notes/Decisions.md`.
