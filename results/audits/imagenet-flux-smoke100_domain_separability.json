@@ -1,0 +1,42 @@
+{
+  "manifest": "/Users/andrea/Projects/experimental_1/data/processed/manifests/imagenet-flux-smoke100_clean.jsonl",
+  "counts": {
+    "ai": 100,
+    "real": 100
+  },
+  "folds": 5,
+  "seed": 42,
+  "balanced_accuracy": 0.63,
+  "roc_auc": 0.6905,
+  "permutations": 200,
+  "p_value": 0.004975124378109453,
+  "features": [
+    "blockiness",
+    "highpass_energy",
+    "residual_std"
+  ],
+  "per_domain": {
+    "ai": {
+      "blockiness": 0.013043067097102101,
+      "highpass_energy": 34.95578687948269,
+      "residual_std": 8.738946719870672
+    },
+    "real": {
+      "blockiness": 0.004176508803029868,
+      "highpass_energy": 45.76591016018587,
+      "residual_std": 11.441477540046467
+    }
+  },
+  "per_domain_std": {
+    "ai": {
+      "blockiness": 0.018079525945389755,
+      "highpass_energy": 14.017841954353429,
+      "residual_std": 3.5044604885883572
+    },
+    "real": {
+      "blockiness": 0.03218116446940273,
+      "highpass_energy": 22.77351458090979,
+      "residual_std": 5.6933786452274475
+    }
+  }
+}

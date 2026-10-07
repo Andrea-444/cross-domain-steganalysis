@@ -3,12 +3,28 @@ __pycache__/
 *.pyc
 dataset/
 raw_data/
-data/
 external/
-results/
 stego_runs/
 .idea/
 
 # Claude Code: share the project skills, keep machine-local settings out.
 .claude/settings.local.json
 .gitflow/
+
+# Bulk data stays local. Git cannot re-include a path whose parent directory is
+# excluded, so these list the direct children and then re-admit the few
+# reproducibility records that must travel between machines.
+/data/*
+!/data/indexes/
+!/data/selections/
+!/data/metadata/
+
+# Indexes, selections and class maps pin exactly which source images a cohort
+# used. Without them another machine reproduces a different cohort.
+/results/*
+!/results/audits/
+
+# Audit summaries are evidence; the probe runs that produced them cost GPU time
+# and cannot be regenerated cheaply. Their bulk outputs are not needed.
+results/audits/**/*.pt
+results/audits/**/predictions/
