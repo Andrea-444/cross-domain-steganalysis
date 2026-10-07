@@ -19,6 +19,7 @@ from typing import BinaryIO, Iterable
 from src.datasets.index import normalize_member
 from src.datasets.manifest import read_manifest
 from src.datasets.selection import validate_selection_manifest
+from src.logging_config import ProgressReporter, get_logger
 
 
 STAGE_COHORTS = {
@@ -26,6 +27,9 @@ STAGE_COHORTS = {
     "pilot": {"audit", "pilot_addition"},
     "full": {"audit", "pilot_addition", "full_addition"},
 }
+
+
+LOGGER = get_logger(__name__)
 
 
 def extract_selection_stage(

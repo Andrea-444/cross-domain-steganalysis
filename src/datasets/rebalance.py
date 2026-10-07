@@ -23,9 +23,13 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from src.datasets.manifest import read_manifest, write_manifest
+from src.logging_config import get_logger
 
 
 DOMAINS = ("real", "ai")
+
+
+LOGGER = get_logger(__name__)
 
 
 def rebalance_cohort(
@@ -120,7 +124,7 @@ def run(args: argparse.Namespace) -> Path:
     config = json.loads(
         (path.parent / f"{path.stem}.config.json").read_text(encoding="utf-8")
     )
-    print(f"Kept {config['record_count']} of {config['source_record_count']} covers.")
-    print(f"Dropped {config['dropped_count']}: {config['dropped_by_domain']}")
-    print(f"Manifest: {path.resolve()}")
+    LOGGER.info(f"Kept {config['record_count']} of {config['source_record_count']} covers.")
+    LOGGER.info(f"Dropped {config['dropped_count']}: {config['dropped_by_domain']}")
+    LOGGER.info(f"Manifest: {path.resolve()}")
     return path

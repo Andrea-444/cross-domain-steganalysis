@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 
-from src.logging_config import configure_logging
+from src.logging_config import configure_logging, get_logger
 from src.datasets.manifest import read_manifest, validate_stego_manifest
 from src.evaluation.metrics import calculate_metrics, summarize_directions
 from src.steganalysis.srnet import (
@@ -30,6 +30,9 @@ DIRECTIONS = {
     "ai_to_real": ("ai", "real"),
     "real_to_ai": ("real", "ai"),
 }
+
+
+LOGGER = get_logger(__name__)
 
 
 def summarize(runs: list[dict[str, object]]) -> dict[str, object]:
@@ -276,17 +279,17 @@ def run_srnet_protocol(
     shutil.copy2(manifest, run_dir / "dataset_manifest.jsonl")
     (run_dir / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print_summary(result["summary"])
-    print(f"Results folder: {run_dir.resolve()}")
+    LOGGER.info(f"Results folder: {run_dir.resolve()}")
     return run_dir
 
 
 def print_summary(summary: dict[str, object]) -> None:
-    print("\nCross-domain summary")
-    print("direction       accuracy       balanced acc   F1")
-    print("----------------------------------------------------")
+    LOGGER.info("\nCross-domain summary")
+    LOGGER.info("direction       accuracy       balanced acc   F1")
+    LOGGER.info("----------------------------------------------------")
     for direction in DIRECTIONS:
         metrics = summary[direction]
-        print(
+        LOGGER.info(
             f"{direction:<15} "
             f"{metrics['accuracy_mean']:.3f} +/- {metrics['accuracy_std']:.3f}   "
             f"{metrics['balanced_accuracy_mean']:.3f} +/- "

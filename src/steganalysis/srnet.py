@@ -16,6 +16,10 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 from src.evaluation.metrics import calculate_metrics
+from src.logging_config import ProgressReporter, get_logger
+
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass
@@ -152,12 +156,19 @@ def train_srnet(
     best_epoch = 0
     history: list[dict[str, float]] = []
 
+    LOGGER.info(
+        "Training on domain=%s seed=%s: %d epochs over %d images, device=%s.",
+        train_domain, seed, epochs, len(train_data), device,
+    )
     for epoch in range(1, epochs + 1):
         epoch_started = time.time()
         model.train()
         train_loss = 0.0
         train_correct = 0
         train_total = 0
+        progress = ProgressReporter(
+            LOGGER, total=len(train_data), label=f"{train_domain} epoch {epoch}"
+        )
         for images, labels, _ in train_loader:
             images = images.to(device)
             labels = labels.to(device)
@@ -169,6 +180,8 @@ def train_srnet(
             train_loss += loss.item() * labels.size(0)
             train_correct += (output.argmax(dim=1) == labels).sum().item()
             train_total += labels.size(0)
+            progress.advance(labels.size(0))
+        progress.finish()
 
         model.eval()
         val_loss = 0.0
@@ -198,7 +211,7 @@ def train_srnet(
             "duration_seconds": time.time() - epoch_started,
         }
         history.append(epoch_record)
-        print(
+        LOGGER.info(
             f"domain={train_domain} seed={seed} epoch={epoch}/{epochs} "
             f"train_loss={epoch_record['train_loss']:.4f} "
             f"train_acc={epoch_record['train_accuracy']:.3f} "

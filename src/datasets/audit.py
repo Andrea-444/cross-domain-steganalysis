@@ -26,9 +26,13 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from src.datasets.manifest import read_manifest
+from src.logging_config import get_logger
 
 
 DOMAIN_LABELS = {"real": 0, "ai": 1}
+
+
+LOGGER = get_logger(__name__)
 
 
 def blockiness_score(array: np.ndarray) -> float:
@@ -217,21 +221,21 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         path_field=args.path_field,
         permutations=args.permutations,
     )
-    print("\nDomain separability on clean covers only")
-    print(f"  counts            : {result['counts']}")
-    print(f"  balanced accuracy : {result['balanced_accuracy']:.3f}")
-    print(f"  ROC-AUC           : {result['roc_auc']:.3f}")
+    LOGGER.info("\nDomain separability on clean covers only")
+    LOGGER.info(f"  counts            : {result['counts']}")
+    LOGGER.info(f"  balanced accuracy : {result['balanced_accuracy']:.3f}")
+    LOGGER.info(f"  ROC-AUC           : {result['roc_auc']:.3f}")
     if result.get("p_value") is not None:
-        print(
+        LOGGER.info(
             f"  permutation p     : {result['p_value']:.4f} "
             f"({result['permutations']} label shuffles)"
         )
-    print("\n  feature means by domain")
+    LOGGER.info("\n  feature means by domain")
     for name in result["features"]:
         real = result["per_domain"].get("real", {}).get(name, float("nan"))
         ai = result["per_domain"].get("ai", {}).get(name, float("nan"))
-        print(f"    {name:<16} real={real:10.4f}   ai={ai:10.4f}")
-    print(
+        LOGGER.info(f"    {name:<16} real={real:10.4f}   ai={ai:10.4f}")
+    LOGGER.info(
         "\n  0.5 means the domains are indistinguishable before embedding."
         "\n  Near 1.0 means a detector can identify the domain from artifacts alone."
     )
@@ -239,5 +243,5 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(result, indent=2), encoding="utf-8")
-        print(f"\n  Written: {path.resolve()}")
+        LOGGER.info(f"\n  Written: {path.resolve()}")
     return result
