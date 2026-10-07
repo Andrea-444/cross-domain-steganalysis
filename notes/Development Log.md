@@ -228,3 +228,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** My first conversion pass skipped three files. The check asked whether the file imported anything from `src.logging_config`, and those three already imported `configure_logging`, so `get_logger` was never added and the modules failed to import. Also recorded: Andrea's embedding run on the GPU machine finished and generated all 11,660 stego images for cohort `1c232642a387`, S-UNIWARD at 0.4 bpp, seed 42.
 - **Next step:** Push the two unpushed commits once GitHub recovers, then run the four-direction experiment on the embedded cohort.
 - **Related files/results:** `src/logging_config.py`, `src/steganalysis/srnet.py`, `src/steganalysis/domain_probe.py`.
+
+## 2026-10-07 — Stopped tracking paths that a run writes
+
+- **Goal:** Repair a `git pull` failure on the GPU machine, and remove its cause.
+- **Work completed:** Copied the seven probe summaries into `evidence/domain-probes/`, which no command writes to, and added `evidence/README.md`. Removed `data/metadata/` and `results/audits/` from version control. `.gitignore` now ignores `data/` and `results/` completely.
+- **Commands or experiment configuration:** No experiment run.
+- **Result:** Nothing under `data/` or `results/` is tracked. The evidence survives as seven files under `evidence/`, and git recorded them as renames at 100 per cent similarity.
+- **Problems or surprises:** Two faults, both from the same mistake of tracking a path that a run also writes. First, the GPU machine generated `results/audits/srnet-probe-6000-crop-balanced/summary.json` for itself, so `git pull` refused to overwrite an untracked file and aborted. Second, the tracked class maps under `data/metadata/` came from `class_maps.py`, which the repository no longer contains; the current `class_mapping.py` writes `mapping_config.json` instead. So the repository pinned the output of superseded code, which is the opposite of the consistency the tracking was meant to give. Andrea questioned tracking these paths on 2026-10-07 and was right.
+- **Next step:** Pull on the GPU machine, then run the four-direction experiment.
+- **Related files/results:** `.gitignore`, `evidence/README.md`.

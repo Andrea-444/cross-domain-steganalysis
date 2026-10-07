@@ -11,29 +11,11 @@ stego_runs/
 .claude/settings.local.json
 .gitflow/
 
-# Generated data stays local. Git cannot re-include a path whose parent
-# directory is excluded, so these list direct children and re-admit the few
-# exceptions below.
-/data/*
+# Everything a run writes stays local. Tracking a path that the pipeline also
+# writes makes `git pull` fail on any machine that generated the same file, and
+# it pins the output of whichever machine committed first.
+data/
+results/
 
-# Class maps are the one tracked data artifact. They reconcile three naming
-# schemes -- GenImage++ cleaned label names, WordNet lemmas and synset IDs --
-# and the mapping is a property of the datasets, not of this machine. If two
-# machines derived it differently, class matching would break with no visible
-# symptom, so the exact mapping is pinned rather than regenerated.
-!/data/metadata/
-
-# Indexes and selections are deliberately NOT tracked. They are regenerable
-# from the source archives by `index` and `select`, they describe whatever
-# happens to be on one machine's disk, and selection manifests record absolute
-# local paths, so another machine cannot consume them anyway.
-
-/results/*
-
-# Audit summaries are evidence rather than generated convenience: the SRNet
-# domain-probe runs behind the recorded preprocessing decision cost GPU time
-# and cannot be regenerated cheaply. Their checkpoints and per-image
-# predictions are large and are not needed elsewhere.
-!/results/audits/
-results/audits/**/*.pt
-results/audits/**/predictions/
+# Evidence worth keeping in the repository is copied into evidence/ by hand.
+# No command writes there, so it never collides with a run.
