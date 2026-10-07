@@ -22,6 +22,7 @@ from src.datasets.recompress import run as run_recompress
 from src.datasets.audit import run as run_audit
 from src.datasets.acquisition import run as run_acquisition
 from src.datasets.class_mapping import build_genimagepp_class_maps
+from src.logging_config import configure_logging
 from src.datasets.manifest import stable_id, write_manifest
 from src.datasets.selection import create_selection_manifest
 
@@ -410,6 +411,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_logging()
     args = parse_args()
     if args.command == "rebalance-cohort":
         run_rebalance(args)

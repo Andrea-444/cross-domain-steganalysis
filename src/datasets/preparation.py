@@ -11,8 +11,12 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from src.datasets.extractor import file_sha256
+from src.logging_config import ProgressReporter, get_logger
 from src.datasets.manifest import read_manifest, validate_clean_manifest, write_manifest
 from src.datasets.selection import validate_selection_manifest
+
+
+LOGGER = get_logger(__name__)
 
 
 class UndersizedImageError(ValueError):
@@ -69,6 +73,11 @@ def prepare_extracted_selection(
 
     clean_records: list[dict[str, object]] = []
     skipped: list[dict[str, str]] = []
+    LOGGER.info(
+        "Preparing %d covers with mode=%s at size %d.",
+        len(extraction_records), mode, size,
+    )
+    progress = ProgressReporter(LOGGER, total=len(extraction_records), label="prepare")
     for record in extraction_records:
         source = Path(str(record.get("local_path", "")))
         if not source.is_file():
@@ -89,10 +98,12 @@ def prepare_extracted_selection(
             skipped.append(
                 {"image_id": image_id, "domain": domain, "reason": str(error)}
             )
+            progress.advance()
             continue
         with Image.open(destination) as image:
             if image.mode != "L" or image.size != (size, size):
                 raise ValueError(f"Invalid processed image: {destination}")
+        progress.advance()
         clean_records.append(
             {
                 "image_id": image_id,
@@ -113,6 +124,11 @@ def prepare_extracted_selection(
             }
         )
 
+    progress.finish()
+    if skipped:
+        LOGGER.warning(
+            "Skipped %d undersized cover(s); see the run configuration.", len(skipped)
+        )
     clean_records.sort(key=lambda record: str(record["image_id"]))
     validate_clean_manifest(clean_records)
     write_manifest(manifest_path, clean_records)

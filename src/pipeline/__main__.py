@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from src.logging_config import configure_logging, get_logger
 from src.pipeline.configuration import PipelineConfiguration
 from src.pipeline.runner import PipelineRunner
+
+LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,11 +20,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_logging()
     args = parse_args()
     configuration_path = Path(args.config)
     configuration = PipelineConfiguration.from_json(configuration_path)
     run_directory = PipelineRunner(configuration, configuration_path).run()
-    print(f"Pipeline run: {run_directory.resolve()}")
+    LOGGER.info("Pipeline run: %s", run_directory.resolve())
 
 
 if __name__ == "__main__":

@@ -22,6 +22,14 @@ from src.datasets.manifest import (
     validate_clean_manifest,
     write_manifest,
 )
+from src.logging_config import (
+    ProgressReporter,
+    configure_logging,
+    get_logger,
+    success_line,
+)
+
+LOGGER = get_logger(__name__)
 
 
 CONSEAL_ALGORITHMS = {"wow", "suniward", "hill", "mipod"}
@@ -190,6 +198,11 @@ def benchmark_manifest(
     stego_records: list[dict[str, object]] = []
     generated_count = 0
     reused_count = 0
+    LOGGER.info(
+        "Embedding %s at %s bpp, seed %s, over %d covers.",
+        algorithm, payload_bpp, seed, len(records),
+    )
+    progress = ProgressReporter(LOGGER, total=len(records), label="embed")
 
     for index, record in enumerate(records):
         clean_path = Path(str(record["clean_path"]))
@@ -240,6 +253,7 @@ def benchmark_manifest(
             Image.fromarray(stego, mode="L").save(destination, format="PNG")
             generated_count += 1
 
+        progress.advance()
         stego_records.append(
             {
                 **record,
@@ -251,6 +265,7 @@ def benchmark_manifest(
             }
         )
 
+    progress.finish()
     output_manifest = write_manifest(run_dir / "dataset_manifest.jsonl", stego_records)
     config = {
         "backend": backend,
@@ -270,10 +285,14 @@ def benchmark_manifest(
         json.dumps(config, indent=2),
         encoding="utf-8",
     )
-    print(f"Generated {generated_count} stego images.")
-    print(f"Reused {reused_count} cached stego images.")
-    print(f"Run folder: {run_dir.resolve()}")
-    print(f"Manifest: {output_manifest.resolve()}")
+    LOGGER.info(
+        success_line(
+            f"Generated {generated_count} stego images. "
+            f"Reused {reused_count} cached stego images."
+        )
+    )
+    LOGGER.info("Run folder: %s", run_dir.resolve())
+    LOGGER.info("Manifest: %s", output_manifest.resolve())
     return output_manifest
 
 
@@ -488,6 +507,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_logging()
     args = parse_args()
     if args.command == "benchmark":
         benchmark_manifest(
