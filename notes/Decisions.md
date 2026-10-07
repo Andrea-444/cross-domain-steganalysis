@@ -1,7 +1,7 @@
 ---
 type: decision-log
 status: active
-updated: 2026-09-01
+updated: 2026-10-07
 ---
 
 # Decisions
@@ -95,3 +95,30 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** Later stages can add only missing images while preserving reproducibility and preventing accidental selection overlap.
 - **Consequences:** Final-test membership is fixed at selection time and excluded from audit/pilot work. Source archives are downloaded once; checksums guard the extracted corpus.
 - **Related:** [[Architecture]], `src/datasets/index.py`, `src/datasets/selection.py`, `src/datasets/extractor.py`.
+
+### 2026-10-07 — Normalize covers by native crop, without resampling
+
+- **Status:** accepted
+- **Context:** The ImageNet and GenImage++ sources differ in resolution: natural covers are mostly around 500x375 and AI covers are uniformly 1024x1024. Reducing both to 256x256 by crop-then-resample therefore applied roughly 1.95x downsampling to one domain and exactly 4x to the other. Resampling attenuates the high-frequency residuals steganalysis measures, so unequal factors attenuate the two domains unequally.
+- **Decision:** Prepare covers with `--preprocess crop`, a centred native crop with no resampling. Exclude source images smaller than the crop size with `--skip-undersized`; excluded covers are recorded in the run configuration.
+- **Reasoning:** Measured on the 100-per-domain cohort, the SRNet domain probe separated clean covers at balanced accuracy 0.745 under crop-then-resample and 0.675 under native crop. Removing the resampling mismatch removed a real and measurable confound.
+- **Consequences:** Undersized covers must be filtered at selection time for larger cohorts, or covers will be lost unevenly across classes; one of 100 natural covers was dropped at 100-per-domain. This supersedes the provisional "prefer crop-only, confirm after checking source dimensions" note in [[Experiment Decisions]].
+- **Related:** [[Development Log]] 2026-09-29, `src/datasets/preparation.py`, `results/audits/srnet-probe-fit/`, `results/audits/srnet-probe-crop/`.
+
+### 2026-10-07 — Do not equalize compression history between domains
+
+- **Status:** accepted
+- **Context:** Natural covers come from JPEG sources (quality 96 by their quantization tables) and AI covers from lossless PNG. JPEG history cannot be removed from covers that already carry it, so the only available intervention is adding matching history to the AI covers.
+- **Decision:** Do not apply JPEG recompression to either domain. Keep `recompress-cohort` available as a diagnostic.
+- **Reasoning:** Adding JPEG at quality 96 to the AI covers moved SRNet domain separability from 0.675 to 0.661, and applying it to both domains moved it to 0.688. Both sit within about one standard deviation of the untreated crop cohort across three seeds, so the intervention changed nothing measurable while adding a processing stage that would itself need justifying.
+- **Consequences:** The residual domain separability of roughly 0.675 survives compression equalization and is therefore most likely intrinsic to the generated images rather than an artifact of preparation. This is an inference from one failed intervention, not proof: semantic content, generation resolution, and tonal statistics under grayscale conversion remain untested as alternative explanations. **Whether a residual separability of about 0.675 is acceptable for the thesis remains open and is not settled by this decision.**
+- **Related:** [[Development Log]] 2026-09-29, `src/datasets/recompress.py`, `results/audits/srnet-probe-smoke100-crop-jpegai96/`, `results/audits/srnet-probe-smoke100-crop-jpegboth96/`.
+
+### 2026-10-07 — Gate cover pairs with the SRNet probe, not the feature screen
+
+- **Status:** accepted
+- **Context:** Two tools now test whether clean covers reveal their domain: a three-feature screen with a permutation test (`audit-domains`) and SRNet itself (`domain_probe`).
+- **Decision:** A cohort is gated by `src.steganalysis.domain_probe`, always paired with a cohort the probe does detect as a positive control. `audit-domains` is a cheap screen only and must not be used to clear a cohort.
+- **Reasoning:** The screen gave a false all-clear twice. It scored the crop cohort at 0.532 with permutation p = 0.2736, and the two recompressed variants at 0.502 and 0.497 with p of 0.54 and 0.60, all of which read as chance. SRNet separated the same covers at 0.675, 0.661 and 0.688. Hand-crafted features cannot bound what a deep network will find.
+- **Consequences:** Gating costs GPU time rather than seconds. A near-chance probe result is only meaningful alongside a positive control, because a null may instead mean the probe lacked power at that cohort size.
+- **Related:** [[Development Log]] 2026-09-29, `src/steganalysis/domain_probe.py`, `src/datasets/audit.py`.
