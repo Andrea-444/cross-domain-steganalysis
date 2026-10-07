@@ -548,8 +548,12 @@ resampling). Resampling attenuates the high-frequency residuals steganalysis
 depends on, and domains whose sources differ in resolution are attenuated by
 different amounts, which is itself a confound.
 
-On the 100-per-domain ImageNet/GenImage++ cohort, where natural covers
-downsample about 1.95x and AI covers exactly 4x, this mattered:
+On the 100-per-domain ImageNet/GenImage++ cohort this mattered. `fit` crops to
+the target aspect ratio using the short side, then resamples, so the effective
+factor for natural covers was a median of 1.46x (mean 1.66x, range 0.66x to
+7.59x) against exactly 4x for the uniformly 1024x1024 AI covers. A factor below
+1.0 means the cover was *enlarged*, and interpolation invents high-frequency
+content rather than attenuating it:
 
 | Preprocessing | Balanced accuracy | ROC-AUC | Permutation p |
 |---|---|---|---|

@@ -178,3 +178,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** None. Four candidate causes of the residual domain separability remain unexcluded and are listed rather than glossed: semantic content, generation resolution, tonal statistics under grayscale conversion, and single-generator scope.
 - **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only, gate it with the probe, then run the first four-direction experiment.
 - **Related files/results:** `notes/Methods and Findings.md`.
+
+## 2026-10-07 — Corrected the recorded resampling factor
+
+- **Goal:** Verify the downsample factor quoted for natural covers after a question about what `fit` actually does.
+- **Work completed:** Measured the effective factor over the 100 natural covers in the smoke cohort and corrected `README.md`, [[Decisions]] and [[Methods and Findings]]. Earlier entries in this log are left as written, since they record what was believed at the time.
+- **Commands or experiment configuration:** Short script over `data/raw/selected/smoke100/real` reading each source's dimensions.
+- **Result:** The recorded figure of about 1.95x was wrong. `ImageOps.fit` crops to the target aspect ratio using the **short** side and then resamples, so the factor is the short side over 256, not the long side. Measured: median 1.46x, mean 1.66x, range 0.66x to 7.59x, against exactly 4.00x for the uniformly 1024x1024 AI covers.
+- **Problems or surprises:** Two findings that strengthen the crop-only decision rather than weaken it. A minimum of 0.66x means some natural covers were **enlarged** under `fit`, and interpolation invents high-frequency content instead of attenuating it, which is worse for a steganalyzer than smoothing. And the factor varied from 0.66x to 7.59x *within* the natural domain, so `fit` applied inconsistent resampling across natural covers as well as unequal resampling between domains. The measured separability figures are unaffected; only the explanatory factor was misquoted.
+- **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only.
+- **Related files/results:** `README.md`, `notes/Decisions.md`, `notes/Methods and Findings.md`.
