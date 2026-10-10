@@ -464,6 +464,45 @@ accuracy are recorded per epoch but do not currently affect selection.
 
 SRNet is computationally heavier than the original prototype. Start with one seed and one epoch to verify a new environment, then use the full configuration for actual results.
 
+### Visualize an SRNet run with W&B
+
+W&B is optional. Install and authenticate it on the machine that performs the
+training; do not put an API key in the repository or in the experiment command:
+
+```bash
+source .venv/bin/activate
+pip install wandb
+wandb login
+```
+
+Enable live tracking by adding these flags to the SRNet command:
+
+```bash
+python -m src.steganalysis.experiments \
+  --manifest data/stego/runs/conseal_suniward_p040_<timestamp>/dataset_manifest.jsonl \
+  --seeds 1 2 3 \
+  --epochs 30 \
+  --batch-size 32 \
+  --output results \
+  --wandb-mode online \
+  --wandb-project stego-cross-domain \
+  --wandb-run-name suniward-p040 \
+  --wandb-tags suniward p040 srnet
+```
+
+One W&B run represents the complete command. It records separate training and
+validation curves for every seed and training domain, per-seed metrics for all
+six evaluation directions, an evaluation table with confusion-matrix cells,
+and aggregate mean/standard-deviation metrics. Local `summary.json`, histories,
+predictions, and checkpoints remain the canonical results.
+
+Use `--wandb-mode offline` when the training host cannot reach W&B. Upload the
+result later with the `wandb sync` command printed by W&B. Add
+`--wandb-upload-artifact` only when the manifest and result metadata should also
+be copied to W&B; checkpoints and image files are never uploaded by this flag.
+If W&B initialization or logging fails, training continues and the failure is
+recorded in the local `summary.json`.
+
 ## Run The Composed Pipeline
 
 Copy and edit the example configuration, then run it non-interactively:

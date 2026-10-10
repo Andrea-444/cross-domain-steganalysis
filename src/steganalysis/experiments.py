@@ -9,6 +9,7 @@ import subprocess
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import torch
@@ -22,6 +23,7 @@ from src.steganalysis.srnet import (
     predict_srnet,
     train_srnet,
 )
+from src.tracking.wandb import start_experiment_run
 
 
 # Ordered by the accepted experiment priority: same-domain answers research
@@ -111,11 +113,17 @@ def git_state() -> tuple[str | None, bool | None]:
 
 def dependency_versions() -> dict[str, str]:
     versions: dict[str, str] = {}
-    for name in ("torch", "numpy", "sklearn", "PIL", "conseal"):
+    distributions = {
+        "torch": "torch",
+        "numpy": "numpy",
+        "sklearn": "scikit-learn",
+        "PIL": "Pillow",
+        "conseal": "conseal",
+    }
+    for name, distribution in distributions.items():
         try:
-            module = __import__(name)
-            versions[name] = str(getattr(module, "__version__", "unknown"))
-        except ImportError:
+            versions[name] = version(distribution)
+        except PackageNotFoundError:
             versions[name] = "not installed"
     return versions
 
@@ -169,6 +177,12 @@ def run_srnet_protocol(
     output: str | Path,
     reference_root: str | Path,
     device: str | None,
+    wandb_mode: str = "disabled",
+    wandb_project: str = "stego-cross-domain",
+    wandb_entity: str | None = None,
+    wandb_run_name: str | None = None,
+    wandb_tags: list[str] | None = None,
+    wandb_upload_artifact: bool = False,
 ) -> Path:
     records = read_manifest(manifest)
     validate_stego_manifest(records)
@@ -178,6 +192,41 @@ def run_srnet_protocol(
     started = time.time()
     started_at = datetime.now(timezone.utc).isoformat()
     resolved_device: str | None = None
+    experiment_config = {
+        "detector": "srnet",
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "seeds": seeds,
+        "device": device or "auto",
+        "reference_root": str(Path(reference_root).resolve()),
+        "manifest": str(Path(manifest).resolve()),
+        "manifest_sha256": file_sha256(manifest),
+        "dataset_counts": dataset_counts(records),
+        "embedding": embedding_condition(records),
+        "directions": list(DIRECTIONS),
+    }
+    tracker = None
+    tracking: dict[str, object] = {"status": "disabled"}
+    if wandb_mode != "disabled":
+        try:
+            tracker = start_experiment_run(
+                mode=wandb_mode,
+                project=wandb_project,
+                entity=wandb_entity,
+                name=wandb_run_name or run_dir.name,
+                config=experiment_config,
+                tags=wandb_tags,
+                upload_artifact=wandb_upload_artifact,
+            )
+            tracking = {
+                "status": "active",
+                "mode": wandb_mode,
+                "project": wandb_project,
+            }
+        except Exception as error:
+            tracking = {"status": "failed", "error": str(error)}
+            LOGGER.warning("W&B initialization failed; continuing locally: %s", error)
 
     for seed in seeds:
         outcomes = {}
@@ -191,6 +240,13 @@ def run_srnet_protocol(
                 learning_rate=learning_rate,
                 reference_root=reference_root,
                 device_name=device,
+                epoch_callback=(
+                    lambda record, current_seed=seed, current_domain=train_domain: (
+                        tracker.log_epoch(current_seed, current_domain, record)
+                    )
+                    if tracker is not None
+                    else None
+                ),
             )
             outcomes[train_domain] = outcome
             resolved_device = str(outcome.device)
@@ -238,7 +294,10 @@ def run_srnet_protocol(
                 batch_size=batch_size,
                 device=outcome.device,
             )
-            direction_results[name] = calculate_metrics(labels, predictions, probabilities)
+            metrics = calculate_metrics(labels, predictions, probabilities)
+            direction_results[name] = metrics
+            if tracker is not None:
+                tracker.log_evaluation(seed, name, metrics)
             write_predictions(
                 run_dir / "predictions" / f"seed{seed}_{name}.jsonl",
                 image_ids, labels, predictions, probabilities, test_domain,
@@ -254,6 +313,7 @@ def run_srnet_protocol(
         "seeds": seeds,
         "runs": runs,
         "summary": summarize(runs),
+        "tracking": tracking,
         "provenance": {
             "manifest_sha256": file_sha256(manifest),
             "dataset_counts": dataset_counts(records),
@@ -275,17 +335,24 @@ def run_srnet_protocol(
         },
     }
     config = {
-        "detector": "srnet",
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "learning_rate": learning_rate,
-        "seeds": seeds,
-        "device": device or "auto",
-        "reference_root": str(Path(reference_root).resolve()),
+        **experiment_config,
+        "tracking": {
+            "mode": wandb_mode,
+            "project": wandb_project,
+            "entity": wandb_entity,
+            "run_name": wandb_run_name,
+            "tags": wandb_tags or [],
+            "upload_artifact": wandb_upload_artifact,
+        },
     }
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
     shutil.copy2(manifest, run_dir / "dataset_manifest.jsonl")
     (run_dir / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    if tracker is not None:
+        result["tracking"] = tracker.finish(result, run_dir)
+        (run_dir / "summary.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8"
+        )
     print_summary(result["summary"])
     LOGGER.info(f"Results folder: {run_dir.resolve()}")
     return run_dir
@@ -321,6 +388,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default=None)
     parser.add_argument("--srnet-root", default=str(DEFAULT_SRNET_ROOT))
     parser.add_argument("--output", default="results")
+    parser.add_argument(
+        "--wandb-mode",
+        choices=["disabled", "online", "offline"],
+        default="disabled",
+    )
+    parser.add_argument("--wandb-project", default="stego-cross-domain")
+    parser.add_argument("--wandb-entity", default=None)
+    parser.add_argument("--wandb-run-name", default=None)
+    parser.add_argument("--wandb-tags", nargs="*", default=None)
+    parser.add_argument("--wandb-upload-artifact", action="store_true")
     return parser.parse_args()
 
 
@@ -336,4 +413,10 @@ if __name__ == "__main__":
         output=args.output,
         reference_root=args.srnet_root,
         device=args.device,
+        wandb_mode=args.wandb_mode,
+        wandb_project=args.wandb_project,
+        wandb_entity=args.wandb_entity,
+        wandb_run_name=args.wandb_run_name,
+        wandb_tags=args.wandb_tags,
+        wandb_upload_artifact=args.wandb_upload_artifact,
     )
