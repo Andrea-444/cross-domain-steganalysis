@@ -1,7 +1,7 @@
 ---
 type: decision-log
 status: active
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 # Decisions
@@ -131,3 +131,29 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** The probe reached balanced accuracy 0.9954 (sd 0.0007) and ROC-AUC 0.9997 (sd 0.0001), with 8 to 11 errors per seed out of 1,948 test covers. The 100-cover figure of 0.675 was a limit of 132 training covers, not a measurement of the gap. This is also consistent with the sources: GenImage++ is published as a benchmark **for** AI-image detection, so real against AI separability is a design property of the data rather than a surprise.
 - **Consequences:** Research question 1, comparing `ai_to_ai` against `real_to_real`, is **unaffected**: domain separability says nothing about clean-versus-stego detection within a single domain. Research question 2, transfer via `real_to_ai`, remains measurable but its interpretation narrows: a transfer failure occurs across a near-maximal domain gap, so it cannot be attributed to steganographic traces differing between domains without a further control that separates that from ordinary distribution shift. Small-scale separability numbers in [[Methods and Findings]] are superseded.
 - **Related:** `results/audits/srnet-probe-6000-crop-balanced/summary.json`, [[Methods and Findings]].
+
+### 2026-10-10 — Native crop is the primary protocol, `fit` is a sensitivity test
+
+- **Status:** accepted
+- **Context:** The two sources hold different resolutions. A native 256x256 crop keeps 35.0 per cent of a natural cover and 6.2 per cent of an AI cover, a ratio of 5.6. `ImageOps.fit` matches the field of view instead, but resamples the natural covers by a median 1.46x (range 0.66x to 7.59x) against exactly 4x for AI covers. One choice matches the field of view. The other matches the resampling. No choice matches both.
+- **Decision:** Run the primary experiment with `--preprocess crop`. Run the same experiment with `fit` as a secondary sensitivity condition. State the field-of-view limitation in the thesis rather than treating either mode as the single correct answer.
+- **Reasoning:** Crop preserves the original pixel values, applies the same literal operation to both domains, and adds no interpolation pattern. S-UNIWARD embeds into those unchanged pixels. Classical spatial steganalysis avoids unnecessary resizing. The `fit` condition then tests whether the conclusion survives a different preprocessing choice. If both modes give the same conclusion, the result is stronger. If they disagree, preprocessing drives the result and no general claim about AI covers against natural covers is available.
+- **Consequences:** Every embedding and detector condition runs twice, once for each preprocessing mode. The AI crop holds a smaller part of the scene and more concentrated texture, which is a stated limitation and not a solved problem. S-UNIWARD hides bits in complex texture, so this limitation reaches research question 1 and not only the domain gap.
+- **Related:** `evidence/domain-probes/`, [[Methods and Findings]]. Suggested by a second opinion from Codex on 2026-10-10.
+
+### 2026-10-10 — Add a mixed-domain control and order the experiments by priority
+
+- **Status:** accepted
+- **Context:** The SRNet domain probe separates the two domains at 0.9954 balanced accuracy on clean covers alone. A poor `real_to_ai` result would therefore have two possible causes, and the four-direction design cannot separate them. The first cause is that embedding traces differ between the domains. The second is that the AI covers simply lie outside the detector's training distribution.
+- **Decision:** Train a third detector on an equal mixture of natural and AI covers, and evaluate it on each domain. This adds two directions, `mixed_to_real` and `mixed_to_ai`. Run the experiments in this order: same-domain first, mixed-domain second, cross-domain last.
+- **Reasoning:** The mixed detector sees both domains during training, so neither test domain is out of distribution for it. If `real_to_ai` is poor while `mixed_to_ai` is good, the first cause is distribution shift. If `mixed_to_ai` and `mixed_to_real` still differ substantially, that is stronger evidence that detectability itself differs between the domains. The ordering puts the interpretable results first and the ambiguous one last.
+- **Consequences:** The mixed training set must hold the **same number of covers** as each single-domain set, with half drawn from each domain. A mixed model trained on the union would see twice the data, and any advantage could come from data volume instead of domain coverage. Training cost rises by half, because each seed now trains three models rather than two.
+- **Related:** [[Methods and Findings]]. Suggested by a second opinion from Codex on 2026-10-10.
+
+### 2026-10-10 — Resolution matching is an optional last pilot
+
+- **Status:** accepted
+- **Decision:** Reducing the AI covers to approximately the natural-image size before cropping stays an option. Test it last, and only after the crop and `fit` conditions are complete. Test it on approximately 500 covers for each domain, not on the full cohort.
+- **Reasoning:** The option improves how much of the scene the AI crop keeps, but it resamples one domain and not the other. It exchanges one asymmetry for another, so a pilot must measure whether it is actually better before any larger run.
+- **Consequences:** No work on this option begins until the crop and `fit` conditions have results.
+- **Related:** [[Decisions]] entry above on preprocessing.

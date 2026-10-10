@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-07
+updated: 2026-10-10
 audience: thesis-writing
 ---
 
@@ -177,8 +177,14 @@ confounders."
 - **Semantic content.** Class matching is by ImageNet synset, but FLUX renders
   a prompt while ImageNet photographs a scene. Composition, framing and object
   scale may differ systematically within a shared class label.
-- **Generation resolution.** FLUX emits 1024x1024; a native 256 crop samples a
-  smaller field of view from the AI covers than from a 500x375 natural image.
+- **Generation resolution — now measured, and large.** A native 256x256 crop
+  keeps **35.0 per cent** of a natural cover and **6.2 per cent** of an AI
+  cover, a ratio of 5.6. In practice the AI covers become close-ups of texture
+  such as fur, while the natural covers still hold most of the scene including
+  smooth areas. This reaches research question 1 and not only the domain gap:
+  S-UNIWARD hides bits in complex texture, so a result of "AI covers are harder
+  to detect" could mean "textured crops are harder to detect". No longer an
+  untested hypothesis. See §1.7.
 - **Tonal statistics under grayscale conversion.** Colour distribution differs
   between domains and the conversion is a fixed linear map.
 - **Single generator.** One FLUX subset supports no claim about AI-generated
@@ -269,3 +275,61 @@ python -m unittest discover -s tests -t . -v
 - [[Pipeline Summary and Experiment Plan]] — gates and open questions.
 - [[Experiment Decisions]] — concise experiment sheet.
 - [[Tasks]] — outstanding work.
+
+## 1.7 Preprocessing: a tradeoff with no clean answer
+
+The two sources hold different resolutions. One preprocessing choice matches
+the field of view. The other matches the resampling. No choice matches both.
+
+| Mode | Field of view | Resampling |
+|---|---|---|
+| `fit` | Equal. Both keep the whole short side. | Unequal. Natural median 1.46x, range 0.66x to 7.59x. AI exactly 4x. |
+| `crop` | Unequal. 35.0 per cent against 6.2 per cent. | Equal. Neither domain gets resampled. |
+
+Measured over 100 covers for each domain.
+
+**Accepted protocol.** `crop` is primary. `fit` runs as a sensitivity test. If
+both give the same conclusion, the result is stronger. If they disagree,
+preprocessing drives the result and no general claim about AI against natural
+covers is available. Resolution matching is an optional last pilot.
+
+This is a property of the two sources, not a defect in the code, and the thesis
+should state it as a limitation rather than present either mode as correct.
+
+## 4. The mixed-domain control
+
+A poor `real_to_ai` result has two possible causes, and the four-direction
+design cannot separate them:
+
+1. The embedding traces differ between the domains.
+2. The AI covers lie outside the detector's training distribution.
+
+Cause 2 is likely at a domain separability of 0.9954. A third detector trains
+on an equal mixture of both domains, so neither test domain is out of
+distribution for it.
+
+| Outcome | Reading |
+|---|---|
+| `real_to_ai` poor, `mixed_to_ai` good | Cause 2. The failure is distribution shift. |
+| `mixed_to_ai` and `mixed_to_real` still differ | Stronger evidence for cause 1. |
+| Both mixed directions good and equal | Detectability does not differ between domains. |
+
+**The mixed training set must hold the same number of covers as each
+single-domain set**, half drawn from each domain. A model trained on the union
+would see twice the data, and any advantage could come from data volume rather
+than from domain coverage.
+
+### Experiment order
+
+1. Same-domain: `real_to_real` and `ai_to_ai`. These answer research question 1
+   and domain separability does not affect them.
+2. Mixed-domain: `mixed_to_real` and `mixed_to_ai`.
+3. Cross-domain: `real_to_ai` and `ai_to_real`. Interpret these last, and only
+   against the mixed-domain result.
+
+## 5. Where the work runs
+
+Acquisition, preparation, embedding and all detector runs happen on the GPU
+machine, at `~/stego-analysis`, with the interpreter at
+`~/stego-analysis/.venv/bin/python`. That machine holds the full datasets. The
+development machine holds a 100-cover cohort for tests only.
