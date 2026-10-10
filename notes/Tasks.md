@@ -1,7 +1,7 @@
 ---
 type: task-list
 status: active
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 # Tasks
@@ -67,6 +67,14 @@ updated: 2026-10-07
 - [ ] Mark runs visibly as `smoke`, `pilot`, `exploratory`, or `final` and filter the dashboard to exclude non-final evidence.
 - [ ] Document setup, login, offline sync, dashboard use, and recovery from interrupted runs in `README.md`.
 - [ ] Consider W&B Sweeps only after a single tracked run and the frozen protocol are validated.
+
+## Accepted experiment plan (2026-10-10)
+
+- [ ] 1. Same-domain: `real_to_real` and `ai_to_ai` on the crop cohort.
+- [ ] 2. Mixed-domain control: `mixed_to_real` and `mixed_to_ai`, with the mixed training set the same size as each single-domain set.
+- [ ] 3. Cross-domain: `real_to_ai` and `ai_to_real`, interpreted against the mixed result.
+- [ ] 4. Repeat 1 to 3 with `fit` preprocessing as a sensitivity test.
+- [ ] 5. Optional last pilot: reduce AI covers to natural-image size, approximately 500 covers per domain.
 
 ## Preflight and analysis
 
