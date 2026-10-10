@@ -646,12 +646,49 @@ The initial metrics are:
 - **Precision:** among images predicted as stego, the proportion that are stego.
 - **Recall:** proportion of stego images detected.
 - **F1:** harmonic mean of stego precision and recall.
+- **Specificity (true negative rate):** proportion of clean images called clean.
+- **False positive rate:** proportion of clean images called stego. Equals
+  `1 - specificity`.
+- **False negative rate:** proportion of stego images called clean.
+- **Detection error `P_E`:** `0.5 * (FPR + FNR)`. The standard single figure in
+  the steganalysis literature. Lower is better, and `0.5` is chance.
+- **Matthews correlation coefficient:** a balanced single figure from all four
+  cells of the confusion matrix. `1.0` is perfect, `0.0` is chance, and `-1.0`
+  is perfectly inverted. It stays informative when the classes are uneven.
+- **Equal error rate:** the rate where the false positive and false negative
+  rates meet on the ROC curve. It needs probabilities, and it is interpolated
+  between the two points that bracket the crossing.
 - **Confusion matrix:**
 
 ```text
 [[correct clean, clean falsely flagged as stego],
  [missed stego,  correctly detected stego]]
 ```
+
+A rate with a zero denominator is `null`, not `0.0`. A direction with no actual
+negatives has no specificity, and reporting `0.0` would read as a perfect
+score. `P_E` is `null` when either of its two rates is. The equal error rate is
+`null` when the labels hold a single class, because the ROC curve is undefined.
+
+### Paired domain-generalization gaps
+
+`summary.json` carries a `generalization_gaps` block:
+
+```text
+real_to_real_minus_real_to_ai
+ai_to_ai_minus_ai_to_real
+```
+
+Each gap is `same_domain - cross_domain`, **computed inside one seed and only
+then averaged**, so the same trained model supplies both terms. Differencing
+the means instead would discard the pairing and let seed-to-seed variation
+inflate the spread. Each entry reports the per-seed values, their mean and
+their standard deviation.
+
+Read the sign with the metric in mind. For a metric where higher is better,
+such as balanced accuracy, a positive gap means the detector degraded across
+domains. For an error metric such as `detection_error` or `eer`, the sign
+reverses and a negative gap means degradation.
 
 For multiple seeds, `summary.json` reports metric mean and standard deviation.
 

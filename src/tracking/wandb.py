@@ -10,6 +10,39 @@ from src.logging_config import get_logger
 LOGGER = get_logger(__name__)
 
 
+EVALUATION_COLUMNS = [
+    "seed", "direction",
+    "accuracy", "balanced_accuracy", "precision", "recall", "f1",
+    "specificity", "false_positive_rate", "false_negative_rate",
+    "detection_error", "mcc",
+    "roc_auc", "pr_auc", "eer",
+    "true_clean", "false_stego", "missed_stego", "true_stego",
+]
+
+_METRIC_COLUMNS = [
+    name for name in EVALUATION_COLUMNS
+    if name not in {"seed", "direction", "true_clean", "false_stego",
+                    "missed_stego", "true_stego"}
+]
+
+
+def evaluation_rows(runs: list[dict[str, Any]]) -> list[list[Any]]:
+    """Build one table row for each seed and direction.
+
+    A metric that is absent becomes None rather than being omitted, so a row
+    never shifts out of step with the column order.
+    """
+    rows: list[list[Any]] = []
+    for seed_run in runs:
+        for direction, metrics in seed_run.get("directions", {}).items():
+            matrix = metrics.get("confusion_matrix") or [[None, None], [None, None]]
+            row: list[Any] = [seed_run.get("seed"), direction]
+            row.extend(metrics.get(name) for name in _METRIC_COLUMNS)
+            row.extend([matrix[0][0], matrix[0][1], matrix[1][0], matrix[1][1]])
+            rows.append(row)
+    return rows
+
+
 class WandbExperimentTracker:
     """Optional live tracking for one complete SRNet protocol invocation."""
 
@@ -111,22 +144,9 @@ class WandbExperimentTracker:
 
         def log_final() -> None:
             self.run.log(_flatten_summary(result.get("summary", {})))
-            columns = [
-                "seed", "direction", "accuracy", "balanced_accuracy", "precision",
-                "recall", "f1", "roc_auc", "pr_auc", "true_clean",
-                "false_stego", "missed_stego", "true_stego",
-            ]
-            table = self._wandb.Table(columns=columns)
-            for seed_run in result.get("runs", []):
-                for direction, metrics in seed_run.get("directions", {}).items():
-                    matrix = metrics.get("confusion_matrix", [[None, None], [None, None]])
-                    table.add_data(
-                        seed_run.get("seed"), direction,
-                        metrics.get("accuracy"), metrics.get("balanced_accuracy"),
-                        metrics.get("precision"), metrics.get("recall"), metrics.get("f1"),
-                        metrics.get("roc_auc"), metrics.get("pr_auc"),
-                        matrix[0][0], matrix[0][1], matrix[1][0], matrix[1][1],
-                    )
+            table = self._wandb.Table(columns=EVALUATION_COLUMNS)
+            for row in evaluation_rows(result.get("runs", [])):
+                table.add_data(*row)
             self.run.log({"evaluation/results": table})
             if self._upload_artifact:
                 artifact = self._wandb.Artifact(
@@ -248,11 +268,26 @@ def _detector_summary(directory: str | Path | None) -> dict[str, Any]:
 
 
 def _flatten_summary(summary: dict[str, Any]) -> dict[str, float]:
+    """Flatten the summary into scalar metrics that W&B can chart.
+
+    Per-seed lists and descriptive strings are skipped. They belong in the
+    evaluation table, not in a scalar panel.
+    """
     flattened: dict[str, float] = {}
     for direction, metrics in summary.items():
         if not isinstance(metrics, dict):
             continue
+        if direction == "generalization_gaps":
+            for pair, gap in metrics.items():
+                if not isinstance(gap, dict):
+                    continue
+                for metric, value in gap.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    flattened[f"gaps/{pair}/{metric}"] = float(value)
+            continue
         for metric, value in metrics.items():
-            if isinstance(value, (int, float)):
-                flattened[f"metrics/{direction}/{metric}"] = float(value)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            flattened[f"metrics/{direction}/{metric}"] = float(value)
     return flattened
