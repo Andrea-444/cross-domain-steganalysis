@@ -162,8 +162,10 @@ class RunOutputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             run_dir = self.run_protocol(Path(raw))
             files = sorted(p.name for p in (run_dir / "predictions").glob("*.jsonl"))
-            self.assertEqual(len(files), 8)  # 4 directions x 2 seeds
+            self.assertEqual(len(files), 12)  # 6 directions x 2 seeds
             self.assertIn("seed1_real_to_ai.jsonl", files)
+            self.assertIn("seed1_mixed_to_ai.jsonl", files)
+            self.assertIn("seed1_mixed_to_real.jsonl", files)
             rows = [
                 json.loads(line)
                 for line in (run_dir / "predictions" / "seed1_real_to_ai.jsonl")

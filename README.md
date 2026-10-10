@@ -14,14 +14,24 @@ The central questions are:
 1. Are hidden payloads intrinsically easier or harder to detect in AI-generated covers?
 2. Does a steganalyzer trained on natural images generalize to AI-generated covers?
 
-The four controlled train-test directions are:
+The six controlled train-test directions, in the order the accepted plan runs
+them:
 
 ```text
-AI   -> AI      primary: AI-domain detectability
-real -> AI      primary: conventional training transferred to AI covers
-real -> real    control: conventional same-domain performance
-AI   -> real    control: reverse transfer
+real -> real    1. same-domain control
+AI   -> AI      1. same-domain AI detectability
+mixed -> real   2. mixed-domain control
+mixed -> AI     2. mixed-domain control
+real -> AI      3. transfer from conventional training
+AI   -> real    3. reverse transfer
 ```
+
+The `mixed` detector trains on an equal mixture of both domains, so neither
+test domain is outside its training distribution. It separates two causes of a
+poor `real -> AI` result: embedding traces that differ between the domains, and
+a detector that is simply out of distribution. The mixed training set holds the
+**same number of covers** as each single-domain set, half from each domain, so
+data volume cannot explain any advantage.
 
 ## Research Architecture
 
