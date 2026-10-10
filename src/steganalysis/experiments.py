@@ -24,12 +24,20 @@ from src.steganalysis.srnet import (
 )
 
 
+# Ordered by the accepted experiment priority: same-domain answers research
+# question 1, mixed-domain separates distribution shift from a real difference
+# in detectability, and cross-domain is interpreted last and against the mixed
+# result. See notes/Decisions.md, 2026-10-10.
 DIRECTIONS = {
-    "ai_to_ai": ("ai", "ai"),
     "real_to_real": ("real", "real"),
-    "ai_to_real": ("ai", "real"),
+    "ai_to_ai": ("ai", "ai"),
+    "mixed_to_real": ("mixed", "real"),
+    "mixed_to_ai": ("mixed", "ai"),
     "real_to_ai": ("real", "ai"),
+    "ai_to_real": ("ai", "real"),
 }
+
+TRAIN_DOMAINS = ("real", "ai", "mixed")
 
 
 LOGGER = get_logger(__name__)
@@ -173,7 +181,7 @@ def run_srnet_protocol(
 
     for seed in seeds:
         outcomes = {}
-        for train_domain in ("real", "ai"):
+        for train_domain in TRAIN_DOMAINS:
             outcome = train_srnet(
                 records=records,
                 train_domain=train_domain,

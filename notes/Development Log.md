@@ -238,3 +238,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Two faults, both from the same mistake of tracking a path that a run also writes. First, the GPU machine generated `results/audits/srnet-probe-6000-crop-balanced/summary.json` for itself, so `git pull` refused to overwrite an untracked file and aborted. Second, the tracked class maps under `data/metadata/` came from `class_maps.py`, which the repository no longer contains; the current `class_mapping.py` writes `mapping_config.json` instead. So the repository pinned the output of superseded code, which is the opposite of the consistency the tracking was meant to give. Andrea questioned tracking these paths on 2026-10-07 and was right.
 - **Next step:** Pull on the GPU machine, then run the four-direction experiment.
 - **Related files/results:** `.gitignore`, `evidence/README.md`.
+
+## 2026-10-10 — Field-of-view confound found, mixed-domain control implemented
+
+- **Goal:** Answer Andrea's question about why the stego images look cropped, and act on a second opinion from Codex.
+- **Work completed:** Measured the field of view that a native crop keeps for each domain. Recorded three decisions on preprocessing and the mixed-domain control. Added `select_training_records` to `src/steganalysis/srnet.py` and extended the protocol from four directions to six.
+- **Commands or experiment configuration:** A one-epoch `experiments` run on the 198-cover S-UNIWARD cohort, to exercise all six directions.
+- **Result:** 117 tests passed. The run trained three detectors and wrote six prediction files, six direction summaries and three checkpoints. Each detector trained on 66 covers, and the mixed set held 33 from each domain.
+- **Problems or surprises:** Andrea noticed that a stego image showed a dog's nose while the processed image showed the whole dog. That is not a defect. She compared the `fit` cohort with the `crop` cohort. The underlying measurement is serious: a native 256x256 crop keeps 35.0 per cent of a natural cover and 6.2 per cent of an AI cover, a ratio of 5.6. The AI covers become close-ups of texture. S-UNIWARD hides bits in complex texture, so this reaches research question 1 and not only the domain gap. I had listed generation resolution as an untested cause but never measured it. A visual check found it.
+- **Next step:** Run the same-domain directions first on the GPU machine, then the mixed-domain control, then cross-domain.
+- **Related files/results:** `src/steganalysis/srnet.py`, `tests/steganalysis/test_mixed_domain.py`, `notes/Decisions.md`.

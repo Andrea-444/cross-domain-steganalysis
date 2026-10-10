@@ -54,6 +54,50 @@ def load_srnet_class(reference_root: str | Path = DEFAULT_SRNET_ROOT):
     return module.Srnet
 
 
+TRAINING_DOMAINS = ("real", "ai", "mixed")
+
+
+def select_training_records(
+    records: list[dict[str, object]],
+    domain: str,
+    split: str,
+    seed: int,
+) -> list[dict[str, object]]:
+    """Return the covers one detector trains on, for one domain and split.
+
+    The `mixed` domain holds half its covers from each single domain, and the
+    **same total** as a single-domain set. A mixed detector trained on the
+    union of both domains would see twice the data, and any advantage it showed
+    could come from data volume rather than from domain coverage.
+
+    Selection is deterministic for a seed, so a repeated run trains on the same
+    covers.
+    """
+    if domain not in TRAINING_DOMAINS:
+        raise ValueError(f"domain must be one of {TRAINING_DOMAINS}, got {domain!r}.")
+    by_domain: dict[str, list[dict[str, object]]] = {}
+    for name in ("real", "ai"):
+        rows = [
+            record
+            for record in records
+            if str(record["domain"]) == name and str(record["split"]) == split
+        ]
+        rows.sort(key=lambda record: str(record["image_id"]))
+        by_domain[name] = rows
+
+    if domain != "mixed":
+        return list(by_domain[domain])
+
+    target = min(len(by_domain["real"]), len(by_domain["ai"]))
+    half = target // 2
+    generator = random.Random(f"mixed-{seed}-{split}")
+    chosen: list[dict[str, object]] = []
+    for name in ("real", "ai"):
+        chosen.extend(generator.sample(by_domain[name], min(half, len(by_domain[name]))))
+    chosen.sort(key=lambda record: str(record["image_id"]))
+    return chosen
+
+
 class ManifestPairDataset(Dataset):
     def __init__(
         self,
@@ -61,12 +105,17 @@ class ManifestPairDataset(Dataset):
         domain: str,
         split: str,
         augment: bool = False,
+        preselected: bool = False,
     ) -> None:
-        pairs = [
-            record
-            for record in records
-            if record["domain"] == domain and record["split"] == split
-        ]
+        pairs = (
+            list(records)
+            if preselected
+            else [
+                record
+                for record in records
+                if record["domain"] == domain and record["split"] == split
+            ]
+        )
         if not pairs:
             raise ValueError(f"No records for domain={domain}, split={split}.")
         self.samples: list[tuple[Path, int, str]] = []
@@ -138,8 +187,14 @@ def train_srnet(
         torch.cuda.manual_seed_all(seed)
     device = resolve_device(device_name)
     model = initialize_srnet(reference_root, device)
-    train_data = ManifestPairDataset(records, train_domain, "train", augment=True)
-    val_data = ManifestPairDataset(records, train_domain, "val", augment=False)
+    train_data = ManifestPairDataset(
+        select_training_records(records, train_domain, "train", seed),
+        train_domain, "train", augment=True, preselected=True,
+    )
+    val_data = ManifestPairDataset(
+        select_training_records(records, train_domain, "val", seed),
+        train_domain, "val", augment=False, preselected=True,
+    )
     generator = torch.Generator().manual_seed(seed)
     train_loader = DataLoader(
         train_data,
