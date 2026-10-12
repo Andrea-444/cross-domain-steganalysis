@@ -100,6 +100,18 @@ def select_training_records(
 
 
 class ManifestPairDataset(Dataset):
+    """Cover and stego images from a manifest, flat or paired.
+
+    In ``paired`` mode one index gives a cover and its own stego, and both get
+    the same augmentation draw. The reference implementation does the same, and
+    the pair constraint is what makes the batch informative: matched content on
+    both sides, so the only systematic difference inside a batch is the
+    embedding. A flat shuffle puts a cover and its stego in different batches
+    and gives each a separate rotation and flip, which removes that structure.
+
+    Evaluation uses the flat mode, because a prediction is per image.
+    """
+
     def __init__(
         self,
         records: list[dict[str, object]],
@@ -107,6 +119,7 @@ class ManifestPairDataset(Dataset):
         split: str,
         augment: bool = False,
         preselected: bool = False,
+        paired: bool = False,
     ) -> None:
         pairs = (
             list(records)
@@ -119,29 +132,71 @@ class ManifestPairDataset(Dataset):
         )
         if not pairs:
             raise ValueError(f"No records for domain={domain}, split={split}.")
+        self.pairs: list[tuple[Path, Path, str]] = []
         self.samples: list[tuple[Path, int, str]] = []
         for record in pairs:
             image_id = str(record["image_id"])
-            self.samples.append((Path(str(record["clean_path"])), 0, image_id))
-            self.samples.append((Path(str(record["stego_path"])), 1, image_id))
+            clean_path = Path(str(record["clean_path"]))
+            stego_path = Path(str(record["stego_path"]))
+            self.pairs.append((clean_path, stego_path, image_id))
+            self.samples.append((clean_path, 0, image_id))
+            self.samples.append((stego_path, 1, image_id))
         self.augment = augment
+        self.paired = paired
 
     def __len__(self) -> int:
-        return len(self.samples)
+        return len(self.pairs) if self.paired else len(self.samples)
 
-    def __getitem__(self, index: int):
-        path, label, image_id = self.samples[index]
+    def _read(self, path: Path) -> np.ndarray:
         with Image.open(path) as image:
             array = np.array(image.convert("L"), dtype=np.float32)
         if array.shape != (256, 256):
             raise ValueError(f"SRNet expects 256x256 grayscale images, got {array.shape}: {path}")
-        if self.augment:
-            rotation = random.randint(0, 3)
-            array = np.rot90(array, rotation).copy()
-            if random.random() < 0.5:
-                array = np.fliplr(array).copy()
-        tensor = torch.from_numpy(array).unsqueeze(0) / 255.0
+        return array
+
+    def _draw(self) -> tuple[int, bool]:
+        if not self.augment:
+            return 0, False
+        return random.randint(0, 3), random.random() < 0.5
+
+    @staticmethod
+    def _to_tensor(array: np.ndarray, rotation: int, flip: bool) -> torch.Tensor:
+        array = np.rot90(array, rotation).copy()
+        if flip:
+            array = np.fliplr(array).copy()
+        return torch.from_numpy(array).unsqueeze(0) / 255.0
+
+    def __getitem__(self, index: int):
+        if self.paired:
+            clean_path, stego_path, image_id = self.pairs[index]
+            # One draw for the pair. Two draws would rotate a cover and its
+            # stego differently, and the pair would no longer be comparable.
+            rotation, flip = self._draw()
+            return (
+                self._to_tensor(self._read(clean_path), rotation, flip),
+                self._to_tensor(self._read(stego_path), rotation, flip),
+                image_id,
+            )
+        path, label, image_id = self.samples[index]
+        rotation, flip = self._draw()
+        tensor = self._to_tensor(self._read(path), rotation, flip)
         return tensor, torch.tensor(label, dtype=torch.long), image_id
+
+
+def paired_batch(
+    clean_images: torch.Tensor,
+    stego_images: torch.Tensor,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Join one paired batch into images and labels, covers first."""
+    images = torch.cat([clean_images, stego_images]).to(device)
+    labels = torch.cat(
+        [
+            torch.zeros(clean_images.size(0), dtype=torch.long),
+            torch.ones(stego_images.size(0), dtype=torch.long),
+        ]
+    ).to(device)
+    return images, labels
 
 
 def resolve_device(device_name: str | None) -> torch.device:
@@ -191,21 +246,27 @@ def train_srnet(
     model = initialize_srnet(reference_root, device)
     train_data = ManifestPairDataset(
         select_training_records(records, train_domain, "train", seed),
-        train_domain, "train", augment=True, preselected=True,
+        train_domain, "train", augment=True, preselected=True, paired=True,
     )
     val_data = ManifestPairDataset(
         select_training_records(records, train_domain, "val", seed),
-        train_domain, "val", augment=False, preselected=True,
+        train_domain, "val", augment=False, preselected=True, paired=True,
     )
+    # batch_size counts images, as it did before. A paired batch holds half as
+    # many covers and the same number of stego twins, so the images for each
+    # optimizer step stay the same and only their composition changes.
+    pairs_per_batch = max(1, batch_size // 2)
     generator = torch.Generator().manual_seed(seed)
     train_loader = DataLoader(
         train_data,
-        batch_size=batch_size,
+        batch_size=pairs_per_batch,
         shuffle=True,
         num_workers=0,
         generator=generator,
     )
-    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=0)
+    val_loader = DataLoader(
+        val_data, batch_size=pairs_per_batch, shuffle=False, num_workers=0
+    )
     optimizer = torch.optim.Adamax(model.parameters(), lr=learning_rate)
     criterion = nn.NLLLoss()
     best_state = None
@@ -214,8 +275,10 @@ def train_srnet(
     history: list[dict[str, float]] = []
 
     LOGGER.info(
-        "Training on domain=%s seed=%s: %d epochs over %d images, device=%s.",
-        train_domain, seed, epochs, len(train_data), device,
+        "Training on domain=%s seed=%s: %d epochs over %d images "
+        "(%d pairs, %d per batch), device=%s.",
+        train_domain, seed, epochs, 2 * len(train_data),
+        len(train_data), pairs_per_batch, device,
     )
     for epoch in range(1, epochs + 1):
         epoch_started = time.time()
@@ -224,11 +287,10 @@ def train_srnet(
         train_correct = 0
         train_total = 0
         progress = ProgressReporter(
-            LOGGER, total=len(train_data), label=f"{train_domain} epoch {epoch}"
+            LOGGER, total=2 * len(train_data), label=f"{train_domain} epoch {epoch}"
         )
-        for images, labels, _ in train_loader:
-            images = images.to(device)
-            labels = labels.to(device)
+        for clean_images, stego_images, _ in train_loader:
+            images, labels = paired_batch(clean_images, stego_images, device)
             optimizer.zero_grad()
             output = model(images)
             loss = criterion(output, labels)
@@ -246,9 +308,8 @@ def train_srnet(
         val_labels: list[int] = []
         val_predictions: list[int] = []
         with torch.no_grad():
-            for images, labels, _ in val_loader:
-                images = images.to(device)
-                labels = labels.to(device)
+            for clean_images, stego_images, _ in val_loader:
+                images, labels = paired_batch(clean_images, stego_images, device)
                 output = model(images)
                 loss = criterion(output, labels)
                 val_loss += loss.item() * labels.size(0)
