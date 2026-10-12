@@ -10,3 +10,4 @@ gdown==5.2.0
 kaggle==1.7.4.5
 huggingface_hub>=0.34
 datasets>=3.0
+wandb>=0.19

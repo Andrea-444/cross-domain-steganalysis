@@ -451,6 +451,31 @@ results/srnet_YYYYMMDD_HHMMSS/
 split, embedding condition read from the manifest, detector commit, repository
 commit and dirty flag, resolved device, platform, dependency versions, and timing.
 
+### Staged runs
+
+`--directions` runs a subset of the six directions, so a long protocol can be
+split into stages that each produce their own result folder and their own W&B
+run. The default is all six directions.
+
+```bash
+# Stage 1: the natural-cover detector
+python -m src.steganalysis.experiments --manifest <manifest> \
+  --directions real_to_real real_to_ai --seeds 1 2 3 --output results
+
+# Stage 2: the AI-cover detector
+python -m src.steganalysis.experiments --manifest <manifest> \
+  --directions ai_to_ai ai_to_real --seeds 1 2 3 --output results
+
+# Stage 3: the mixed-domain control
+python -m src.steganalysis.experiments --manifest <manifest> \
+  --directions mixed_to_real mixed_to_ai --seeds 1 2 3 --output results
+```
+
+Each train domain supplies two directions from one trained model, so keep both
+directions of a domain in the same stage. A stage that splits them trains the
+same model twice and reports no paired generalization gap, because a gap needs
+the same-domain and cross-domain result from one seed of one model.
+
 Because the reference model ends in `LogSoftmax`, the retained probability is a
 genuine `P(stego)`, so `summary.json` also reports ROC-AUC and PR-AUC. Both are
 `null` for a direction whose test labels contain only one class.
