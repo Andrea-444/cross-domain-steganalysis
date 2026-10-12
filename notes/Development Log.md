@@ -248,3 +248,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Andrea noticed that a stego image showed a dog's nose while the processed image showed the whole dog. That is not a defect. She compared the `fit` cohort with the `crop` cohort. The underlying measurement is serious: a native 256x256 crop keeps 35.0 per cent of a natural cover and 6.2 per cent of an AI cover, a ratio of 5.6. The AI covers become close-ups of texture. S-UNIWARD hides bits in complex texture, so this reaches research question 1 and not only the domain gap. I had listed generation resolution as an untested cause but never measured it. A visual check found it.
 - **Next step:** Run the same-domain directions first on the GPU machine, then the mixed-domain control, then cross-domain.
 - **Related files/results:** `src/steganalysis/srnet.py`, `tests/steganalysis/test_mixed_domain.py`, `notes/Decisions.md`.
+
+## 2026-10-10 — Detection-error metrics and paired generalization gaps
+
+- **Goal:** Add the metrics the steganalysis literature reports, and measure domain generalization with a paired statistic.
+- **Work completed:** Added specificity, false positive rate, false negative rate, detection error `P_E`, Matthews correlation coefficient and equal error rate to `src/evaluation/metrics.py`. Added `generalization_gaps`, which differences `real_to_real` against `real_to_ai` and `ai_to_ai` against `ai_to_real` inside each seed. The W&B evaluation table and the flattened scalars carry all of it.
+- **Commands or experiment configuration:** Unit tests, CLI help on five entry points, and a synthetic two-seed protocol built in memory. No SRNet weights, no dataset, no GPU and no training run, as instructed.
+- **Result:** 149 tests passed, up from 117. The synthetic check produced a paired balanced-accuracy gap of +0.2925 with a standard deviation of 0.0075, and the matching detection-error gap of -0.2925, which confirms the sign convention. The W&B table holds 19 columns, and the flattened scalars hold 54 gap keys.
+- **Problems or surprises:** Three faults appeared during the work. `accuracy_score` raises on an empty input, so `calculate_metrics` now returns an all-null result instead of reaching sklearn. `summarize_directions` assumed every required metric was present in every run and raised a `KeyError` otherwise, so it now skips an absent metric. My own first test compared floats with exact equality.
+- **Next step:** Andrea merges the branch and pulls it onto the experiment host.
+- **Related files/results:** `src/evaluation/metrics.py`, `src/tracking/wandb.py`, `tests/evaluation/`.

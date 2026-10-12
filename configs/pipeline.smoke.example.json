@@ -40,7 +40,7 @@
   "tracking": {
     "enabled": false,
     "mode": "disabled",
-    "project": "cross-domain-steganalysis",
+    "project": "stego-cross-domain",
     "entity": null,
     "upload_pipeline_artifact": false
   }

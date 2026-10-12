@@ -4,6 +4,197 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.logging_config import get_logger
+
+
+LOGGER = get_logger(__name__)
+
+
+EVALUATION_COLUMNS = [
+    "seed", "direction",
+    "accuracy", "balanced_accuracy", "precision", "recall", "f1",
+    "specificity", "false_positive_rate", "false_negative_rate",
+    "detection_error", "mcc",
+    "roc_auc", "pr_auc", "eer",
+    "true_clean", "false_stego", "missed_stego", "true_stego",
+]
+
+_METRIC_COLUMNS = [
+    name for name in EVALUATION_COLUMNS
+    if name not in {"seed", "direction", "true_clean", "false_stego",
+                    "missed_stego", "true_stego"}
+]
+
+
+def evaluation_rows(runs: list[dict[str, Any]]) -> list[list[Any]]:
+    """Build one table row for each seed and direction.
+
+    A metric that is absent becomes None rather than being omitted, so a row
+    never shifts out of step with the column order.
+    """
+    rows: list[list[Any]] = []
+    for seed_run in runs:
+        for direction, metrics in seed_run.get("directions", {}).items():
+            matrix = metrics.get("confusion_matrix") or [[None, None], [None, None]]
+            row: list[Any] = [seed_run.get("seed"), direction]
+            row.extend(metrics.get(name) for name in _METRIC_COLUMNS)
+            row.extend([matrix[0][0], matrix[0][1], matrix[1][0], matrix[1][1]])
+            rows.append(row)
+    return rows
+
+
+class WandbExperimentTracker:
+    """Optional live tracking for one complete SRNet protocol invocation."""
+
+    def __init__(
+        self,
+        *,
+        project: str,
+        entity: str | None,
+        mode: str,
+        name: str,
+        config: dict[str, Any],
+        tags: list[str] | None = None,
+        upload_artifact: bool = False,
+    ) -> None:
+        try:
+            import wandb
+        except ImportError as error:
+            raise RuntimeError(
+                "W&B tracking is enabled but wandb is not installed. "
+                "Install it with `pip install wandb` or use --wandb-mode disabled."
+            ) from error
+
+        self._wandb = wandb
+        self._upload_artifact = upload_artifact
+        self._failed = False
+        self.run = wandb.init(
+            project=project,
+            entity=entity,
+            mode=mode,
+            name=name,
+            config=config,
+            tags=tags or None,
+        )
+        if self.run is None:
+            raise RuntimeError("W&B did not create a run.")
+
+    def _try(self, action: str, callback) -> bool:
+        if self._failed:
+            return False
+        try:
+            callback()
+            return True
+        except Exception as error:  # W&B must not invalidate canonical local results.
+            self._failed = True
+            LOGGER.warning("W&B %s failed; continuing with local results: %s", action, error)
+            return False
+
+    def log_epoch(
+        self,
+        seed: int,
+        train_domain: str,
+        epoch_record: dict[str, float],
+    ) -> None:
+        prefix = f"training/seed_{seed}/{train_domain}"
+
+        def log() -> None:
+            epoch_key = f"{prefix}/epoch"
+            self.run.define_metric(epoch_key)
+            self.run.define_metric(f"{prefix}/*", step_metric=epoch_key)
+            self.run.log(
+                {
+                    epoch_key: int(epoch_record["epoch"]),
+                    **{
+                        f"{prefix}/{key}": float(value)
+                        for key, value in epoch_record.items()
+                        if key != "epoch"
+                    },
+                }
+            )
+
+        self._try("epoch logging", log)
+
+    def log_evaluation(
+        self,
+        seed: int,
+        direction: str,
+        metrics: dict[str, Any],
+    ) -> None:
+        prefix = f"evaluation/seed_{seed}/{direction}"
+        values = {
+            f"{prefix}/{key}": float(value)
+            for key, value in metrics.items()
+            if isinstance(value, (int, float)) and value is not None
+        }
+        matrix = metrics.get("confusion_matrix")
+        if isinstance(matrix, list) and len(matrix) == 2:
+            values.update(
+                {
+                    f"{prefix}/true_clean": float(matrix[0][0]),
+                    f"{prefix}/false_stego": float(matrix[0][1]),
+                    f"{prefix}/missed_stego": float(matrix[1][0]),
+                    f"{prefix}/true_stego": float(matrix[1][1]),
+                }
+            )
+        self._try("evaluation logging", lambda: self.run.log(values))
+
+    def finish(self, result: dict[str, Any], run_directory: str | Path) -> dict[str, Any]:
+        run_directory = Path(run_directory)
+
+        def log_final() -> None:
+            self.run.log(_flatten_summary(result.get("summary", {})))
+            table = self._wandb.Table(columns=EVALUATION_COLUMNS)
+            for row in evaluation_rows(result.get("runs", [])):
+                table.add_data(*row)
+            self.run.log({"evaluation/results": table})
+            if self._upload_artifact:
+                artifact = self._wandb.Artifact(
+                    name=f"{run_directory.name}-metadata",
+                    type="steganalysis-run",
+                )
+                for filename in ("config.json", "dataset_manifest.jsonl", "summary.json"):
+                    path = run_directory / filename
+                    if path.exists():
+                        artifact.add_file(str(path))
+                self.run.log_artifact(artifact)
+
+        self._try("final result logging", log_final)
+        metadata = {
+            "status": "failed" if self._failed else "logged",
+            "run_id": getattr(self.run, "id", None),
+            "run_url": getattr(self.run, "url", None),
+        }
+        try:
+            self.run.finish()
+        except Exception as error:
+            metadata["status"] = "failed"
+            LOGGER.warning("W&B run finalization failed; local results are intact: %s", error)
+        return metadata
+
+
+def start_experiment_run(
+    *,
+    mode: str,
+    project: str,
+    entity: str | None,
+    name: str,
+    config: dict[str, Any],
+    tags: list[str] | None,
+    upload_artifact: bool,
+) -> WandbExperimentTracker | None:
+    if mode == "disabled":
+        return None
+    return WandbExperimentTracker(
+        project=project,
+        entity=entity,
+        mode=mode,
+        name=name,
+        config=config,
+        tags=tags,
+        upload_artifact=upload_artifact,
+    )
+
 
 def log_pipeline_run(
     run_directory: str | Path,
@@ -77,11 +268,26 @@ def _detector_summary(directory: str | Path | None) -> dict[str, Any]:
 
 
 def _flatten_summary(summary: dict[str, Any]) -> dict[str, float]:
+    """Flatten the summary into scalar metrics that W&B can chart.
+
+    Per-seed lists and descriptive strings are skipped. They belong in the
+    evaluation table, not in a scalar panel.
+    """
     flattened: dict[str, float] = {}
     for direction, metrics in summary.items():
         if not isinstance(metrics, dict):
             continue
+        if direction == "generalization_gaps":
+            for pair, gap in metrics.items():
+                if not isinstance(gap, dict):
+                    continue
+                for metric, value in gap.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    flattened[f"gaps/{pair}/{metric}"] = float(value)
+            continue
         for metric, value in metrics.items():
-            if isinstance(value, (int, float)):
-                flattened[f"metrics/{direction}/{metric}"] = float(value)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            flattened[f"metrics/{direction}/{metric}"] = float(value)
     return flattened

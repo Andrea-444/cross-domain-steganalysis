@@ -8,6 +8,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
@@ -179,6 +180,7 @@ def train_srnet(
     learning_rate: float,
     reference_root: str | Path = DEFAULT_SRNET_ROOT,
     device_name: str | None = None,
+    epoch_callback: Callable[[dict[str, float]], None] | None = None,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -266,6 +268,8 @@ def train_srnet(
             "duration_seconds": time.time() - epoch_started,
         }
         history.append(epoch_record)
+        if epoch_callback is not None:
+            epoch_callback(dict(epoch_record))
         LOGGER.info(
             f"domain={train_domain} seed={seed} epoch={epoch}/{epochs} "
             f"train_loss={epoch_record['train_loss']:.4f} "

@@ -9,10 +9,59 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     confusion_matrix,
     f1_score,
+    matthews_corrcoef,
     precision_score,
     recall_score,
     roc_auc_score,
+    roc_curve,
 )
+
+# Pairs differenced to measure domain generalization. Each gap is
+# same-domain minus cross-domain, computed inside one seed and only then
+# averaged. Differencing the means instead would discard the pairing and
+# inflate the spread with seed-to-seed variation.
+GAP_PAIRS = {
+    "real_to_real_minus_real_to_ai": ("real_to_real", "real_to_ai"),
+    "ai_to_ai_minus_ai_to_real": ("ai_to_ai", "ai_to_real"),
+}
+
+
+def _ratio(numerator: float, denominator: float) -> float | None:
+    """Return a rate, or None when the denominator is zero.
+
+    A rate with no denominator is undefined rather than zero. Returning 0.0
+    would read as a perfect score.
+    """
+    if denominator <= 0:
+        return None
+    return float(numerator) / float(denominator)
+
+
+def equal_error_rate(
+    labels: list[int], probabilities: list[float]
+) -> float | None:
+    """Return the rate where the false positive and false negative rates meet.
+
+    Returns None when the labels hold a single class or no samples, because the
+    ROC curve is undefined there.
+    """
+    if not labels or len(set(labels)) < 2:
+        return None
+    false_positive, true_positive, _ = roc_curve(labels, probabilities)
+    false_negative = 1.0 - true_positive
+    difference = false_negative - false_positive
+    crossing = np.flatnonzero(np.diff(np.signbit(difference)))
+    if crossing.size == 0:
+        index = int(np.nanargmin(np.abs(difference)))
+        return float((false_positive[index] + false_negative[index]) / 2.0)
+    # Interpolate between the two points that bracket the crossing, which is
+    # more accurate than taking the nearer of them.
+    first = int(crossing[0])
+    second = first + 1
+    span = difference[first] - difference[second]
+    weight = 0.0 if span == 0 else difference[first] / span
+    rate = false_positive[first] + weight * (false_positive[second] - false_positive[first])
+    return float(rate)
 
 
 def calculate_metrics(
@@ -26,6 +75,22 @@ def calculate_metrics(
     added. Both are ``None`` when the labels contain a single class, which
     happens in small smoke runs and leaves ROC/PR undefined.
     """
+    if not labels:
+        # sklearn raises on an empty input. An empty evaluation has no value
+        # for any metric, so every field is undefined rather than zero.
+        empty: dict[str, object] = {
+            name: None
+            for name in (
+                "accuracy", "balanced_accuracy", "precision", "recall", "f1",
+                "specificity", "false_positive_rate", "false_negative_rate",
+                "detection_error", "mcc",
+            )
+        }
+        empty["confusion_matrix"] = [[0, 0], [0, 0]]
+        if probabilities is not None:
+            empty.update({"roc_auc": None, "pr_auc": None, "eer": None})
+        return empty
+
     metrics: dict[str, object] = {
         "accuracy": accuracy_score(labels, predictions),
         "balanced_accuracy": balanced_accuracy_score(labels, predictions),
@@ -38,6 +103,24 @@ def calculate_metrics(
             labels=[0, 1],
         ).tolist(),
     }
+    true_clean, false_stego, missed_stego, true_stego = (
+        int(value)
+        for value in np.asarray(metrics["confusion_matrix"], dtype=np.int64).ravel()
+    )
+    specificity = _ratio(true_clean, true_clean + false_stego)
+    false_positive_rate = _ratio(false_stego, false_stego + true_clean)
+    false_negative_rate = _ratio(missed_stego, missed_stego + true_stego)
+    metrics["specificity"] = specificity
+    metrics["false_positive_rate"] = false_positive_rate
+    metrics["false_negative_rate"] = false_negative_rate
+    metrics["detection_error"] = (
+        None
+        if false_positive_rate is None or false_negative_rate is None
+        else 0.5 * (false_positive_rate + false_negative_rate)
+    )
+    metrics["mcc"] = (
+        float(matthews_corrcoef(labels, predictions)) if labels else None
+    )
     if probabilities is not None:
         single_class = len(set(labels)) < 2
         metrics["roc_auc"] = (
@@ -46,7 +129,43 @@ def calculate_metrics(
         metrics["pr_auc"] = (
             None if single_class else float(average_precision_score(labels, probabilities))
         )
+        metrics["eer"] = None if single_class else equal_error_rate(labels, probabilities)
     return metrics
+
+
+def generalization_gaps(runs: list[dict[str, object]]) -> dict[str, object]:
+    """Difference each same-domain direction against its cross-domain partner.
+
+    The difference is taken inside one seed and only then averaged, so the
+    same trained model supplies both terms. The sign convention is
+    ``same_domain - cross_domain``. For a metric where a higher value is
+    better, a positive gap means the detector degraded across domains. For
+    an error metric such as ``detection_error`` or ``eer`` the sign reverses.
+    """
+    gaps: dict[str, object] = {}
+    for name, (same, cross) in GAP_PAIRS.items():
+        paired: dict[str, list[float]] = {}
+        for run in runs:
+            directions = run.get("directions", {})
+            if same not in directions or cross not in directions:
+                continue
+            for metric, value in directions[same].items():
+                other = directions[cross].get(metric)
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    continue
+                if not isinstance(other, (int, float)) or isinstance(other, bool):
+                    continue
+                paired.setdefault(metric, []).append(float(value) - float(other))
+        if not paired:
+            continue
+        entry: dict[str, object] = {"same_domain": same, "cross_domain": cross}
+        for metric, values in paired.items():
+            entry[f"{metric}_per_seed"] = values
+            entry[f"{metric}_mean"] = float(np.mean(values))
+            entry[f"{metric}_std"] = float(np.std(values))
+        entry["seeds"] = len(next(iter(paired.values())))
+        gaps[name] = entry
+    return gaps
 
 
 def summarize_directions(
@@ -55,14 +174,25 @@ def summarize_directions(
 ) -> dict[str, object]:
     """Aggregate repeated-seed metrics for each train-test direction."""
     metric_names = ["accuracy", "balanced_accuracy", "precision", "recall", "f1"]
+    # Rates are undefined when their denominator is zero, so they aggregate
+    # with the optional metrics rather than the required ones.
     # Threshold-independent metrics are optional: they are absent when no
     # probabilities were recorded, and None when a direction had one label class.
-    optional_names = ["roc_auc", "pr_auc"]
+    optional_names = [
+        "roc_auc", "pr_auc", "eer", "specificity", "false_positive_rate",
+        "false_negative_rate", "detection_error", "mcc",
+    ]
     summary: dict[str, object] = {}
     for direction in directions:
         direction_summary: dict[str, object] = {}
         for metric in metric_names:
-            values = [float(run["directions"][direction][metric]) for run in runs]
+            values = [
+                float(run["directions"][direction][metric])
+                for run in runs
+                if run["directions"][direction].get(metric) is not None
+            ]
+            if not values:
+                continue
             direction_summary[f"{metric}_mean"] = float(np.mean(values))
             direction_summary[f"{metric}_std"] = float(np.std(values))
         for metric in optional_names:
@@ -79,7 +209,12 @@ def summarize_directions(
         matrices = [
             np.asarray(run["directions"][direction]["confusion_matrix"], dtype=np.int64)
             for run in runs
+            if run["directions"][direction].get("confusion_matrix") is not None
         ]
-        direction_summary["confusion_matrix_sum"] = np.sum(matrices, axis=0).tolist()
+        if matrices:
+            direction_summary["confusion_matrix_sum"] = np.sum(matrices, axis=0).tolist()
         summary[direction] = direction_summary
+    gaps = generalization_gaps(runs)
+    if gaps:
+        summary["generalization_gaps"] = gaps
     return summary

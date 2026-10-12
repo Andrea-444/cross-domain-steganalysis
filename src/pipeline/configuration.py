@@ -97,7 +97,7 @@ class DetectorConfiguration:
 class TrackingConfiguration:
     enabled: bool = False
     mode: str = "disabled"
-    project: str = "cross-domain-steganalysis"
+    project: str = "stego-cross-domain"
     entity: str | None = None
     upload_pipeline_artifact: bool = False
 
