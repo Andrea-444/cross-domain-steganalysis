@@ -17,5 +17,10 @@ stego_runs/
 data/
 results/
 
+# The W&B client writes its local cache here. An untracked folder makes
+# `git status --porcelain` non-empty, which sets repository_dirty in the
+# provenance of every tracked run and hides a genuinely modified checkout.
+wandb/
+
 # Evidence worth keeping in the repository is copied into evidence/ by hand.
 # No command writes there, so it never collides with a run.
