@@ -157,3 +157,20 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** The option improves how much of the scene the AI crop keeps, but it resamples one domain and not the other. It exchanges one asymmetry for another, so a pilot must measure whether it is actually better before any larger run.
 - **Consequences:** No work on this option begins until the crop and `fit` conditions have results.
 - **Related:** [[Decisions]] entry above on preprocessing.
+
+### 2026-10-12 — Run the six directions in three stages, grouped by train domain
+
+- **Status:** accepted
+- **Context:** The full protocol trains three detectors for each seed. It then evaluates six directions. At three seeds that is nine trainings in one command. A single command gives no intermediate result. A failure late in the command also loses the earlier work. The user asked to run the directions one at a time.
+- **Decision:** Add a `--directions` option that runs a subset of the six directions. Run the protocol in three stages, each stage taking both directions of one train domain: `real_to_real real_to_ai`, then `ai_to_ai ai_to_real`, then `mixed_to_real mixed_to_ai`. Each stage writes its own result folder and its own W&B run.
+- **Reasoning:** The train domain, and not the direction, is the natural unit of work. One trained model supplies both of its directions. A stage that keeps the pair together therefore costs exactly the same training as a stage that takes one direction. A stage that splits the pair trains the same model twice. It also loses the paired generalization gap. The gap subtracts the cross-domain result from the same-domain result inside one seed of one model, and one stage must hold both terms. The staged form keeps every gap computable. It also gives a readable result after each stage.
+- **Consequences:** The results arrive in three folders instead of one, and in three W&B runs instead of one. A comparison across stages must confirm that the manifest SHA-256 and the seeds match. The `config.json` of each stage records both. The stage order differs from the reading order. Stage 1 already holds a same-domain and a cross-domain direction. Read the same-domain numbers from stages 1 and 2 first. Read the mixed numbers from stage 3 second. Interpret the cross-domain numbers last, and against stage 3.
+- **Related:** [[Decisions]] entry of 2026-10-10 on the mixed-domain control and experiment priority. The `--directions` option is in `src/steganalysis/experiments.py`.
+
+### 2026-10-12 — Declare `wandb` as a project dependency
+
+- **Status:** accepted
+- **Context:** The experiment runner imports `wandb` only when the command asks for tracking. The runner catches a failed import. The run then continues and writes complete local results, with `tracking.status` set to `failed`. The package was absent from `requirements.txt`. A machine that installed the stated requirements would therefore lose tracking silently, except for one warning line.
+- **Decision:** Add `wandb>=0.19` to `requirements.txt`.
+- **Reasoning:** Tracking is now part of the documented workflow, so the environment must state it. The lower bound and not a pin, because the package records results and does not affect them.
+- **Consequences:** Every machine needs `pip install -r requirements.txt` again before an online run. The local results stay canonical whether tracking succeeds or fails. Confirm `tracking.status` in `summary.json` after each tracked run.

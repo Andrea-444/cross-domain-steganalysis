@@ -45,8 +45,41 @@ TRAIN_DOMAINS = ("real", "ai", "mixed")
 LOGGER = get_logger(__name__)
 
 
-def summarize(runs: list[dict[str, object]]) -> dict[str, object]:
-    return summarize_directions(runs, DIRECTIONS)
+def summarize(
+    runs: list[dict[str, object]],
+    directions: list[str] | None = None,
+) -> dict[str, object]:
+    return summarize_directions(runs, directions or list(DIRECTIONS))
+
+
+def select_directions(names: list[str] | None) -> list[str]:
+    """Keep the accepted priority order whatever order the request gives.
+
+    The order is part of the protocol: same-domain is read first, mixed-domain
+    second, and cross-domain last and against the mixed result. A stage that
+    asks for the directions in a different order still gets them in this one.
+    """
+    if not names:
+        return list(DIRECTIONS)
+    unknown = sorted({name for name in names if name not in DIRECTIONS})
+    if unknown:
+        raise ValueError(
+            f"Unknown direction(s): {', '.join(unknown)}. "
+            f"Known directions: {', '.join(DIRECTIONS)}."
+        )
+    requested = set(names)
+    return [name for name in DIRECTIONS if name in requested]
+
+
+def required_train_domains(directions: list[str]) -> list[str]:
+    """Train only the domains that the selected directions test.
+
+    Each train domain supplies two directions, so a stage that takes both
+    directions of one domain costs the same training as a stage that takes
+    one of them. A stage that splits the two retrains the same model twice.
+    """
+    needed = {DIRECTIONS[name][0] for name in directions}
+    return [domain for domain in TRAIN_DOMAINS if domain in needed]
 
 
 def validate_pair_splits(records: list[dict[str, object]]) -> None:
@@ -177,6 +210,7 @@ def run_srnet_protocol(
     output: str | Path,
     reference_root: str | Path,
     device: str | None,
+    directions: list[str] | None = None,
     wandb_mode: str = "disabled",
     wandb_project: str = "stego-cross-domain",
     wandb_entity: str | None = None,
@@ -187,6 +221,8 @@ def run_srnet_protocol(
     records = read_manifest(manifest)
     validate_stego_manifest(records)
     validate_pair_splits(records)
+    selected_directions = select_directions(directions)
+    train_domains = required_train_domains(selected_directions)
     run_dir = timestamped_results_dir(output, "srnet")
     runs: list[dict[str, object]] = []
     started = time.time()
@@ -204,7 +240,8 @@ def run_srnet_protocol(
         "manifest_sha256": file_sha256(manifest),
         "dataset_counts": dataset_counts(records),
         "embedding": embedding_condition(records),
-        "directions": list(DIRECTIONS),
+        "directions": selected_directions,
+        "train_domains": train_domains,
     }
     tracker = None
     tracking: dict[str, object] = {"status": "disabled"}
@@ -230,7 +267,7 @@ def run_srnet_protocol(
 
     for seed in seeds:
         outcomes = {}
-        for train_domain in TRAIN_DOMAINS:
+        for train_domain in train_domains:
             outcome = train_srnet(
                 records=records,
                 train_domain=train_domain,
@@ -285,7 +322,8 @@ def run_srnet_protocol(
                 )
 
         direction_results: dict[str, object] = {}
-        for name, (train_domain, test_domain) in DIRECTIONS.items():
+        for name in selected_directions:
+            train_domain, test_domain = DIRECTIONS[name]
             outcome = outcomes[train_domain]
             labels, predictions, probabilities, image_ids = predict_srnet(
                 model=outcome.model,
@@ -312,7 +350,7 @@ def run_srnet_protocol(
         "manifest": str(Path(manifest).resolve()),
         "seeds": seeds,
         "runs": runs,
-        "summary": summarize(runs),
+        "summary": summarize(runs, selected_directions),
         "tracking": tracking,
         "provenance": {
             "manifest_sha256": file_sha256(manifest),
@@ -353,16 +391,19 @@ def run_srnet_protocol(
         (run_dir / "summary.json").write_text(
             json.dumps(result, indent=2), encoding="utf-8"
         )
-    print_summary(result["summary"])
+    print_summary(result["summary"], selected_directions)
     LOGGER.info(f"Results folder: {run_dir.resolve()}")
     return run_dir
 
 
-def print_summary(summary: dict[str, object]) -> None:
+def print_summary(
+    summary: dict[str, object],
+    directions: list[str] | None = None,
+) -> None:
     LOGGER.info("\nCross-domain summary")
     LOGGER.info("direction       accuracy       balanced acc   F1")
     LOGGER.info("----------------------------------------------------")
-    for direction in DIRECTIONS:
+    for direction in directions or list(DIRECTIONS):
         metrics = summary[direction]
         LOGGER.info(
             f"{direction:<15} "
@@ -382,6 +423,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--detector", choices=["srnet"], default="srnet")
     parser.add_argument("--protocol", choices=["full"], default="full")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
+    parser.add_argument(
+        "--directions",
+        nargs="+",
+        choices=list(DIRECTIONS),
+        default=None,
+        help=(
+            "Run a subset of the directions, for a staged run. The default is "
+            "all six. Keep both directions of one train domain in the same "
+            "stage: they share the trained model, and their paired gap needs "
+            "both of them."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
@@ -407,6 +460,7 @@ if __name__ == "__main__":
     run_srnet_protocol(
         manifest=args.manifest,
         seeds=args.seeds,
+        directions=args.directions,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,

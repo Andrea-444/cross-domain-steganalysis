@@ -10,7 +10,12 @@ import torch
 
 from src.datasets.manifest import write_manifest
 from src.evaluation.metrics import calculate_metrics
-from src.steganalysis.experiments import embedding_condition, run_srnet_protocol
+from src.steganalysis.experiments import (
+    embedding_condition,
+    required_train_domains,
+    run_srnet_protocol,
+    select_directions,
+)
 from src.steganalysis.srnet import TrainingOutcome, resolve_device
 
 
@@ -88,8 +93,8 @@ class EmbeddingConditionTests(unittest.TestCase):
         self.assertEqual(embedding_condition(records)["algorithm"], ["mipod", "suniward"])
 
 
-class RunOutputTests(unittest.TestCase):
-    """The protocol run must persist everything needed to interpret it later."""
+class ProtocolHarness:
+    """Fake training and prediction, so the tests exercise the protocol only."""
 
     def build_manifest(self, directory: Path) -> Path:
         records = []
@@ -140,13 +145,18 @@ class RunOutputTests(unittest.TestCase):
         image_ids = [f"{domain}_2", f"{domain}_2", f"{domain}_3", f"{domain}_3"]
         return [0, 1, 0, 1], [0, 1, 1, 1], [0.2, 0.8, 0.6, 0.9], image_ids
 
-    def run_protocol(self, directory: Path) -> Path:
+    def run_protocol(
+        self,
+        directory: Path,
+        directions: list[str] | None = None,
+    ) -> Path:
         manifest = self.build_manifest(directory)
         with patch(
             "src.steganalysis.experiments.train_srnet", side_effect=self.fake_training
-        ), patch(
+        ) as training, patch(
             "src.steganalysis.experiments.predict_srnet", side_effect=self.fake_prediction
         ):
+            self.training_calls = training
             return run_srnet_protocol(
                 manifest=manifest,
                 seeds=[1, 2],
@@ -156,7 +166,13 @@ class RunOutputTests(unittest.TestCase):
                 output=directory / "results",
                 reference_root="external/srnet-reference",
                 device="cpu",
+                directions=directions,
             )
+
+
+
+class RunOutputTests(ProtocolHarness, unittest.TestCase):
+    """The protocol run must persist everything needed to interpret it later."""
 
     def test_predictions_written_per_direction_and_seed(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -224,3 +240,91 @@ class RunOutputTests(unittest.TestCase):
                 self.assertIn(key, provenance)
             self.assertEqual(provenance["embedding"]["algorithm"], "suniward")
             self.assertEqual(provenance["dataset_counts"]["real"]["test"], 2)
+
+
+class DirectionSelectionTests(unittest.TestCase):
+    def test_default_is_every_direction_in_priority_order(self) -> None:
+        self.assertEqual(
+            select_directions(None),
+            [
+                "real_to_real",
+                "ai_to_ai",
+                "mixed_to_real",
+                "mixed_to_ai",
+                "real_to_ai",
+                "ai_to_real",
+            ],
+        )
+
+    def test_requested_order_does_not_change_protocol_order(self) -> None:
+        self.assertEqual(
+            select_directions(["real_to_ai", "real_to_real"]),
+            ["real_to_real", "real_to_ai"],
+        )
+
+    def test_duplicate_request_runs_once(self) -> None:
+        self.assertEqual(select_directions(["ai_to_ai", "ai_to_ai"]), ["ai_to_ai"])
+
+    def test_unknown_direction_is_rejected(self) -> None:
+        with self.assertRaises(ValueError) as error:
+            select_directions(["real_to_real", "real_to_sky"])
+        self.assertIn("real_to_sky", str(error.exception))
+
+    def test_train_domains_cover_the_selected_directions_only(self) -> None:
+        self.assertEqual(required_train_domains(["real_to_real", "real_to_ai"]), ["real"])
+        self.assertEqual(
+            required_train_domains(["mixed_to_ai", "ai_to_real"]), ["ai", "mixed"]
+        )
+
+    def test_train_domains_are_not_repeated(self) -> None:
+        self.assertEqual(required_train_domains(list(select_directions(None))),
+                         ["real", "ai", "mixed"])
+
+
+class StagedRunTests(ProtocolHarness, unittest.TestCase):
+    def test_stage_trains_only_the_needed_domain(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            run_dir = self.run_protocol(
+                Path(raw), directions=["real_to_real", "real_to_ai"]
+            )
+            trained = {call.kwargs["train_domain"] for call in self.training_calls.call_args_list}
+            self.assertEqual(trained, {"real"})
+            checkpoints = sorted(p.name for p in (run_dir / "checkpoints").glob("*.pt"))
+            self.assertEqual(checkpoints, ["seed1_real.pt", "seed2_real.pt"])
+
+    def test_stage_evaluates_only_the_selected_directions(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            run_dir = self.run_protocol(
+                Path(raw), directions=["real_to_real", "real_to_ai"]
+            )
+            files = sorted(p.name for p in (run_dir / "predictions").glob("*.jsonl"))
+            self.assertEqual(
+                files,
+                [
+                    "seed1_real_to_ai.jsonl",
+                    "seed1_real_to_real.jsonl",
+                    "seed2_real_to_ai.jsonl",
+                    "seed2_real_to_real.jsonl",
+                ],
+            )
+
+    def test_stage_summary_holds_the_selected_directions_and_their_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            run_dir = self.run_protocol(
+                Path(raw), directions=["real_to_real", "real_to_ai"]
+            )
+            summary = json.loads((run_dir / "summary.json").read_text())
+            self.assertEqual(
+                sorted(key for key in summary["summary"] if key != "generalization_gaps"),
+                ["real_to_ai", "real_to_real"],
+            )
+            gaps = summary["summary"]["generalization_gaps"]
+            self.assertIn("real_to_real_minus_real_to_ai", gaps)
+            self.assertNotIn("ai_to_ai_minus_ai_to_real", gaps)
+
+    def test_stage_config_records_the_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            run_dir = self.run_protocol(Path(raw), directions=["mixed_to_ai"])
+            config = json.loads((run_dir / "config.json").read_text())
+            self.assertEqual(config["directions"], ["mixed_to_ai"])
+            self.assertEqual(config["train_domains"], ["mixed"])
