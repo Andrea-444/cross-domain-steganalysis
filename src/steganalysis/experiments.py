@@ -161,6 +161,57 @@ def dependency_versions() -> dict[str, str]:
     return versions
 
 
+def accelerator_state() -> dict[str, object]:
+    """Record the GPU driver beside the library versions.
+
+    A driver upgrade on 2026-10-10 left the GPU machine with kernel module
+    595.84 in memory and 595.99.02 on disk. The runs before and after that date
+    therefore ran in different environments, and nothing in the provenance said
+    so. The library version of torch does not change when a driver does.
+
+    `nvml_available` is recorded because a broken NVML is the visible symptom
+    of a mismatch: CUDA arithmetic continues to work, and the management
+    library stops.
+    """
+    state: dict[str, object] = {
+        "cuda_runtime": getattr(torch.version, "cuda", None),
+        "kernel_driver": None,
+        "nvml_available": None,
+        "device_name": None,
+    }
+    # Linux exposes the running kernel module here. The file is absent on
+    # macOS and on a machine with no NVIDIA driver, which is not an error.
+    version_file = Path("/proc/driver/nvidia/version")
+    try:
+        if version_file.exists():
+            first_line = version_file.read_text(encoding="utf-8").splitlines()[0]
+            state["kernel_driver"] = first_line.strip()
+    except OSError:
+        pass
+    state["mps_available"] = bool(
+        getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+    )
+    if not torch.cuda.is_available():
+        return state
+    try:
+        state["device_name"] = torch.cuda.get_device_name(0)
+    except Exception:
+        pass
+    try:
+        import pynvml
+    except ImportError:
+        # No reporting library present. That is not the same as a broken one,
+        # so the field stays None rather than False.
+        return state
+    try:
+        pynvml.nvmlInit()
+        state["nvml_available"] = True
+        pynvml.nvmlShutdown()
+    except Exception:
+        state["nvml_available"] = False
+    return state
+
+
 def write_predictions(
     path: Path,
     image_ids: list[str],
@@ -367,6 +418,7 @@ def run_srnet_protocol(
                 "python": platform.python_version(),
             },
             "dependencies": dependency_versions(),
+            "accelerator": accelerator_state(),
             "started_at": started_at,
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "duration_seconds": time.time() - started,
