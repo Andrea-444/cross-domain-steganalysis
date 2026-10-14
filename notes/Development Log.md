@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-10-07
+updated: 2026-10-14
 ---
 
 # Development Log
@@ -258,3 +258,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Three faults appeared during the work. `accuracy_score` raises on an empty input, so `calculate_metrics` now returns an all-null result instead of reaching sklearn. `summarize_directions` assumed every required metric was present in every run and raised a `KeyError` otherwise, so it now skips an absent metric. My own first test compared floats with exact equality.
 - **Next step:** Andrea merges the branch and pulls it onto the experiment host.
 - **Related files/results:** `src/evaluation/metrics.py`, `src/tracking/wandb.py`, `tests/evaluation/`.
+
+## 2026-10-12 to 2026-10-14 — Stage 1 returned chance, and the learning rate was the cause
+
+- **Goal:** Run the first real experiment, then find out why it returned nothing.
+- **Work completed:** Ran stage 1 of the six-direction protocol. Diagnosed the null result over five checks. Fixed two deviations from the SRNet reference: the training batches now hold each cover with its own stego, and the initialization now matches the reference. Moved every diagnostic into `src/steganalysis/diagnostics.py` as a command, after Andrea asked for them documented rather than pasted into a terminal. Added the GPU driver to run provenance. Wrote section 6 of [[Methods and Findings]].
+- **Commands or experiment configuration:** Stage 1 at `--directions real_to_real real_to_ai --seeds 1 2 3 --epochs 30 --batch-size 32`, learning rate 1e-3. A paired pilot at 150 epochs on one seed. A 200-step probe at learning rates 1e-3, 1e-4 and 1e-5. The classical check with and without `--synthetic`. The `synthetic-train` control at 60 epochs and learning rate 1e-4.
+- **Result:** Stage 1 gave accuracy exactly 0.5000 in both directions and all three seeds, with the same row twice in the confusion matrix. The paired pilot held a train loss of 0.693147 for 150 epochs, which is ln(2). The classical check found the real embedding at ROC-AUC 0.5578, z = 2.45, and its synthetic control at 0.9522, z = 19.17. The `synthetic-train` control reached balanced accuracy 0.8917 in 4,500 steps at learning rate 1e-4. The test suite grew from 149 to 190.
+- **Problems or surprises:** The cause was the learning rate. At 1e-3 the detector lowers its loss by answering the same thing for every image. A cover and its stego then agree, and the accuracy is exactly 0.5 by construction. The probe showed the embedding-driven part of the output staying flat at 1e-3 and rising four to five times at 1e-4, for both initializations. Four of my own faults belong here. Two diagnostics used 375 and 1,250 optimizer steps, which cannot decide anything. The second one sent the work toward the initialization, which was not the cause. The first classical measurement ran with no control of its own and nearly condemned the data. I raised a GPU driver mismatch as a candidate on a timing correlation, and the control disproved it four days later. A driver upgrade on 2026-10-10 did leave the machine with mismatched versions, which broke `nvidia-smi` but not CUDA arithmetic.
+- **Next step:** Repeat stage 1 for `real_to_real` with one seed and learning rate 1e-4, as a pilot. Nothing else changes. If the loss moves below ln(2), run the three stages.
+- **Related files/results:** `src/steganalysis/diagnostics.py`, `src/steganalysis/srnet.py`, `notes/Methods and Findings.md` section 6, `results/diagnostics/` on the GPU machine.

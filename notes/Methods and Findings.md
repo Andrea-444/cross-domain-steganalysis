@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-10
+updated: 2026-10-14
 audience: thesis-writing
 ---
 
@@ -20,9 +20,10 @@ interpretation are kept separate throughout**. Anything labelled
 
 > [!warning] No experimental result exists yet
 > Every number below comes from **methodological validation**, not from the
-> research experiment. The four-direction clean-versus-stego protocol has never
-> been run on audited data. Nothing here answers the thesis questions; it
-> establishes whether the dataset and pipeline can answer them.
+> research experiment. Stage 1 of the six-direction protocol ran on 2026-10-12
+> and returned chance accuracy from a fault in the detector configuration. See
+> section 6. Nothing here answers the thesis questions. It establishes whether
+> the dataset and pipeline can answer them.
 
 ## 1. Cover-domain confound investigation
 
@@ -333,3 +334,171 @@ Acquisition, preparation, embedding and all detector runs happen on the GPU
 machine, at `~/stego-analysis`, with the interpreter at
 `~/stego-analysis/.venv/bin/python`. That machine holds the full datasets. The
 development machine holds a 100-cover cohort for tests only.
+
+## 6. The detector null result, and what caused it
+
+### 6.1 What happened
+
+Stage 1 of the six-direction protocol ran on 2026-10-12. It trained on natural
+covers and tested on both domains, with three seeds, 30 epochs and a learning
+rate of 1e-3. Both directions returned **accuracy exactly 0.5000**, with a
+standard deviation of 0.0 across the seeds.
+
+Three observations fixed the shape of the failure.
+
+The train loss held at 0.693 from epoch 2 to epoch 30, in every seed. That
+number is the natural logarithm of 2, and it is the loss of a classifier that
+answers at random.
+
+The confusion matrix held the same row twice. For seed 1 it was 366 and 608 on
+the clean row, and 366 and 608 on the stego row. A cover and its stego received
+the same answer every time.
+
+The control direction failed with the rest. `real_to_real` trains and tests on
+one domain, so it must work before any cross-domain number carries meaning.
+
+> [!warning] Stage 1 and the paired pilot are failures, not results
+> No number from either run describes AI covers against natural covers. Both
+> stay in this record as a methodological finding.
+
+### 6.2 The diagnostic sequence
+
+Each check is a command in the repository. See `README.md`, section "Diagnose a
+Detector Run", and `src/steganalysis/diagnostics.py`.
+
+| # | Check | Measurement | Reading |
+|---|---|---|---|
+| 1 | `embedding` | 0 shared paths, 0 identical pairs, 7.65 % of pixels changed, peak difference 1 | the embedding is present and matches S-UNIWARD at 0.4 bpp |
+| 2 | `classical --synthetic` | ROC-AUC 0.9522, z = 19.17 | the classical instrument works |
+| 3 | `classical` | ROC-AUC 0.5578, z = 2.45 | the real embedding is detectable, and weakly so |
+| 4 | `collapse` | see 6.3 | the detector gives up its sensitivity to the embedding |
+| 5 | `synthetic-train` | balanced accuracy 0.8917 | the detector and the training code work |
+
+Checks 2 and 3 ran on CPU, so neither depends on the GPU.
+
+### 6.3 The measurement that identified the cause
+
+The `collapse` check trains for a short run and records two quantities at
+fixed steps. `logit_std` is the spread of the output across a batch.
+`pair_gap` is the output difference between a cover and its own stego. Their
+ratio is the part of the response that follows the embedding rather than the
+picture, and the ratio is the quantity that matters: both parts move with the
+output scale, which the initialization sets.
+
+Ratio of `pair_gap` to `logit_std`, after 200 steps:
+
+| Initialization | step 1 | lr 1e-3 | lr 1e-4 | lr 1e-5 |
+|---|---|---|---|---|
+| Xavier normal (earlier) | 4.6e-3 | 3.8e-3 | 1.5e-2 | 1.0e-2 |
+| reference scheme | 3.5e-3 | 4.3e-3 | 1.8e-2 | 1.3e-2 |
+
+At 1e-3 the ratio holds flat. At 1e-4 and 1e-5 it becomes four to five times
+larger over the same 200 steps. **Both rows show it**, which is what separates
+the learning rate from the initialization.
+
+### 6.4 Cause
+
+*Interpretation.* At a learning rate of 1e-3 the detector reduces its loss by
+making its output constant. The loss then settles at ln(2), and every image
+receives the same answer. A cover and its stego therefore receive the same
+answer, and the accuracy is exactly 0.5 by construction rather than by chance.
+The paired pilot held a train loss of 0.693147 for 150 epochs, which is ln(2)
+to six decimals, and the output spread fell toward zero at every learning rate
+tested.
+
+At 1e-4 that route down is not available quickly enough, and the loss falls by
+separating the two classes instead.
+
+### 6.5 Two defects fixed during the investigation
+
+Both were deviations from the reference implementation, and both are fixed.
+
+**The batches were not paired.** The loader built a flat list of 2N images and
+shuffled it, so a cover and its stego went into different batches. The
+reference returns the pair from one dataset index. The pair constraint is what
+makes a batch informative here: both classes then hold the same pictures, so
+the only systematic difference inside a batch is the embedding.
+
+**The initialization did not match the reference.** Xavier normal on the
+512-to-2 output layer gives a standard deviation near 0.06. The reference uses
+normal with a standard deviation of 0.01. Measured on a structured batch in
+train mode, the earlier scheme starts at 0.6998 and the reference scheme at
+0.6922, against ln(2) of 0.6931.
+
+> [!important] Attribution limit
+> Both fixes preceded the learning-rate test, so the successful control run
+> carries all three changes together. The table in 6.3 is the only measurement
+> that isolates the learning rate, because it holds for both initializations.
+> The contribution of each fix is **not** measured.
+
+### 6.6 What the positive control established
+
+`synthetic-train` builds a non-adaptive embedding of plus or minus one on half
+the pixels, trains the real detector through the real training code, and
+reports balanced accuracy. The embedding is not steganography. It touches flat
+regions that an adaptive algorithm avoids, and a classical detector finds it at
+ROC-AUC 0.9522.
+
+Result on 2026-10-14: balanced accuracy **0.8917**, train loss from 0.6939 to
+0.1875, over 4,500 optimizer steps at a learning rate of 1e-4.
+
+The paired pilot did 36,450 steps at 1e-3 and stayed at ln(2). The control did
+**eight times fewer steps** and learned. The training budget was therefore not
+the limiting factor, although the SRNet paper uses 400,000 iterations.
+
+### 6.7 A GPU driver confound, raised and then closed
+
+The GPU machine lost `nvidia-smi` on 2026-10-14. The kernel module in memory
+was 595.84 and the module on disk was 595.99.02. The machine booted on
+2026-10-08 11:26, and `dpkg` installed `nvidia-driver-595-open` 595.99.02 on
+2026-10-10 06:37. A loaded kernel module does not change while a machine runs.
+
+This mattered because the dates split the project exactly. The domain probe
+reached 0.9959 on 2026-10-07. Stage 1, the paired pilot and the collapse probes
+all returned chance results on 2026-10-12 and 2026-10-13.
+
+**The control closes the correlation.** `synthetic-train` ran on 2026-10-14,
+four days after the upgrade, on the same mismatched machine, and converged to
+0.8917. CUDA arithmetic gives the right answers. Only NVML is broken, so `nvidia-smi` does
+not run and some PyTorch paths abort at `nvmlInit_v2`. No GPU result is
+discarded.
+
+Runs now record the accelerator in their provenance: the CUDA runtime, the
+kernel driver line from `/proc/driver/nvidia/version`, the device name, whether
+MPS is present, and whether NVML starts. Runs before 2026-10-14 do not, and
+their driver is the one recorded above.
+
+### 6.8 Methodological findings worth reporting
+
+**A control direction that returns exactly 0.5000 is a diagnostic, not a
+result.** Exactly 0.5 with zero standard deviation across seeds, together with
+identical confusion rows, identifies a constant-output detector. Approximately
+0.5 would have meant something else.
+
+**A positive control needs a known answer.** The real stego images could not
+decide between "the detector is broken" and "the task is hard", because nobody
+knew whether the detector should have found that signal. An embedding that a
+500-feature linear model finds at 0.95 removes the ambiguity.
+
+**A diagnostic must have the power to decide.** Two checks run during this
+investigation used 375 and 1,250 optimizer steps. Both returned chance results,
+and I read both as evidence of a fault. Neither had the power to show anything.
+The second one sent the investigation toward the initialization, which was not
+the cause.
+
+**An instrument needs its own control.** The first classical measurement
+returned 0.4975, and I nearly read it as evidence against the data. A second
+run used a synthetic embedding and returned 0.9522, which showed that the
+instrument works. The 0.5578 on real data then became interpretable.
+
+### 6.9 Open
+
+The control used an easy embedding. S-UNIWARD at 0.4 bpp is much harder, and
+the classical detector finds it at ROC-AUC 0.5578. Whether a learning rate of
+1e-4 is enough for the real task is **not yet measured**. The pilot that tests
+it repeats stage 1 exactly, with one change: `real_to_real`, one seed, 150
+epochs, batch size 32, learning rate 1e-4.
+
+Until that pilot finishes, the established claim is narrow: the detector learns
+an easy embedding, and the learning rate of 1e-3 prevented it from learning
+anything.
