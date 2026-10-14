@@ -23,6 +23,13 @@ from src.steganalysis.srnet import (
     predict_srnet,
     train_srnet,
 )
+from src.tracking.naming import (
+    manifest_condition,
+    run_group,
+    run_name,
+    run_role,
+    run_tags,
+)
 from src.tracking.wandb import start_experiment_run
 
 
@@ -294,6 +301,31 @@ def run_srnet_protocol(
         "directions": selected_directions,
         "train_domains": train_domains,
     }
+    # The name, tags and group come from the run itself rather than from a
+    # flag, so a run in W&B states the condition it actually used. The
+    # embedding and the preprocessing live in the manifest chain, which no
+    # command argument repeats.
+    condition = manifest_condition(manifest)
+    role = run_role(seeds, len(selected_directions), len(DIRECTIONS))
+    derived_name = run_name(
+        role=role,
+        train_domains=train_domains,
+        condition=condition,
+        learning_rate=learning_rate,
+        seeds=seeds,
+    )
+    derived_tags = run_tags(
+        role=role,
+        detector="srnet",
+        train_domains=train_domains,
+        directions=selected_directions,
+        condition=condition,
+        learning_rate=learning_rate,
+        seeds=seeds,
+        extra=wandb_tags,
+    )
+    experiment_config["condition"] = condition
+    experiment_config["role"] = role
     tracker = None
     tracking: dict[str, object] = {"status": "disabled"}
     if wandb_mode != "disabled":
@@ -302,10 +334,12 @@ def run_srnet_protocol(
                 mode=wandb_mode,
                 project=wandb_project,
                 entity=wandb_entity,
-                name=wandb_run_name or run_dir.name,
+                name=wandb_run_name or derived_name,
                 config=experiment_config,
-                tags=wandb_tags,
+                tags=derived_tags,
                 upload_artifact=wandb_upload_artifact,
+                group=run_group(condition, experiment_config["manifest_sha256"]),
+                job_type=role,
             )
             tracking = {
                 "status": "active",
@@ -430,8 +464,10 @@ def run_srnet_protocol(
             "mode": wandb_mode,
             "project": wandb_project,
             "entity": wandb_entity,
-            "run_name": wandb_run_name,
-            "tags": wandb_tags or [],
+            "run_name": wandb_run_name or derived_name,
+            "tags": derived_tags,
+            "group": run_group(condition, experiment_config["manifest_sha256"]),
+            "job_type": role,
             "upload_artifact": wandb_upload_artifact,
         },
     }

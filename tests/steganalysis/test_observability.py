@@ -328,3 +328,102 @@ class StagedRunTests(ProtocolHarness, unittest.TestCase):
             config = json.loads((run_dir / "config.json").read_text())
             self.assertEqual(config["directions"], ["mixed_to_ai"])
             self.assertEqual(config["train_domains"], ["mixed"])
+
+
+class TrackedRunIdentityTests(ProtocolHarness, unittest.TestCase):
+    """The name W&B receives must come from the run, not from a flag."""
+
+    def write_chain(self, directory: Path) -> None:
+        """A manifest with the embedding and preprocessing behind it."""
+        prepared = directory / "cohort_clean.jsonl"
+        prepared.write_text("", encoding="utf-8")
+        (directory / "cohort_clean.config.json").write_text(
+            json.dumps({"name": "cohort", "preprocess_mode": "crop", "size": 256}),
+            encoding="utf-8",
+        )
+        (directory / "config.json").write_text(
+            json.dumps(
+                {
+                    "algorithm": "suniward",
+                    "payload_bpp": 0.4,
+                    "record_count": 8,
+                    "input_manifest": str(prepared),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def start_tracked(self, directory: Path, **kwargs) -> dict:
+        self.write_chain(directory)
+        manifest = self.build_manifest(directory)
+        captured: dict = {}
+
+        def capture(**call):
+            captured.update(call)
+            return None  # no tracker, so the run continues untracked
+
+        with patch(
+            "src.steganalysis.experiments.train_srnet", side_effect=self.fake_training
+        ), patch(
+            "src.steganalysis.experiments.predict_srnet", side_effect=self.fake_prediction
+        ), patch(
+            "src.steganalysis.experiments.start_experiment_run", side_effect=capture
+        ):
+            run_srnet_protocol(
+                manifest=manifest,
+                seeds=kwargs.get("seeds", [1]),
+                epochs=1,
+                batch_size=2,
+                learning_rate=kwargs.get("learning_rate", 1e-4),
+                output=directory / "results",
+                reference_root="external/srnet-reference",
+                device="cpu",
+                directions=kwargs.get("directions"),
+                wandb_mode="online",
+                wandb_tags=kwargs.get("wandb_tags"),
+            )
+        return captured
+
+    def test_name_states_role_domain_condition_rate_and_seeds(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            captured = self.start_tracked(
+                Path(raw), seeds=[1], directions=["real_to_real", "real_to_ai"]
+            )
+        self.assertEqual(
+            captured["name"], "pilot-real-suniward040-crop-lr1e-4-s1"
+        )
+
+    def test_three_seeds_on_a_subset_is_a_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            captured = self.start_tracked(
+                Path(raw), seeds=[1, 2], directions=["ai_to_ai", "ai_to_real"]
+            )
+        self.assertTrue(captured["name"].startswith("stage-ai-suniward040-crop-"))
+        self.assertEqual(captured["job_type"], "stage")
+
+    def test_group_holds_the_condition_and_the_manifest_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            captured = self.start_tracked(Path(raw), directions=["real_to_real"])
+        self.assertTrue(captured["group"].startswith("suniward040-crop-"))
+
+    def test_tags_carry_every_facet_and_keep_the_user_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            captured = self.start_tracked(
+                Path(raw), directions=["real_to_real"], wandb_tags=["rerun"]
+            )
+        for expected in ("role:pilot", "detector:srnet", "algorithm:suniward",
+                         "preprocess:crop", "lr:1e-4", "domain:real",
+                         "direction:real_to_real", "rerun"):
+            self.assertIn(expected, captured["tags"])
+
+    def test_the_run_config_records_what_was_sent(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            self.start_tracked(directory, directions=["real_to_real"])
+            runs = sorted((directory / "results").glob("srnet_*"))
+            config = json.loads((runs[-1] / "config.json").read_text())
+        self.assertEqual(config["role"], "pilot")
+        self.assertEqual(config["condition"]["preprocess_mode"], "crop")
+        self.assertEqual(
+            config["tracking"]["run_name"], "pilot-real-suniward040-crop-lr1e-4-s1"
+        )

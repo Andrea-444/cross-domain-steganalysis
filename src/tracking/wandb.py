@@ -56,6 +56,8 @@ class WandbExperimentTracker:
         config: dict[str, Any],
         tags: list[str] | None = None,
         upload_artifact: bool = False,
+        group: str | None = None,
+        job_type: str | None = None,
     ) -> None:
         try:
             import wandb
@@ -75,6 +77,8 @@ class WandbExperimentTracker:
             name=name,
             config=config,
             tags=tags or None,
+            group=group,
+            job_type=job_type,
         )
         if self.run is None:
             raise RuntimeError("W&B did not create a run.")
@@ -182,6 +186,8 @@ def start_experiment_run(
     config: dict[str, Any],
     tags: list[str] | None,
     upload_artifact: bool,
+    group: str | None = None,
+    job_type: str | None = None,
 ) -> WandbExperimentTracker | None:
     if mode == "disabled":
         return None
@@ -193,6 +199,8 @@ def start_experiment_run(
         config=config,
         tags=tags,
         upload_artifact=upload_artifact,
+        group=group,
+        job_type=job_type,
     )
 
 
