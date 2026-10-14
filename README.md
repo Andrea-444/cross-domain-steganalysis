@@ -565,6 +565,44 @@ python -m src.steganalysis.experiments \
   --wandb-tags suniward p040 srnet
 ```
 
+### Run names in W&B
+
+The run name, tags and group are **derived from the run**, not typed. A name
+that was typed can disagree with what ran; a derived one cannot.
+
+```text
+<role>-<domains>-<algorithm><payload>-<preprocess>-lr<rate>-s<seeds>
+
+pilot-real-suniward040-crop-lr1e-4-s1
+stage-ai-suniward040-crop-lr1e-4-s1-2-3
+full-real+ai+mixed-suniward040-crop-lr1e-4-s1-2-3
+```
+
+| Part | Where it comes from |
+|---|---|
+| `role` | `pilot` for one seed, `full` for all six directions, otherwise `stage` |
+| `domains` | the domains actually trained, joined by `+` |
+| `algorithm`, `payload` | the embedding run's `config.json`, beside the manifest |
+| `preprocess` | the preparation config, two steps back along the manifest chain |
+| `rate` | `--learning-rate` |
+| `seeds` | `--seeds` |
+
+A part that cannot be read prints `unknown` rather than being omitted, so a
+missing chain is visible in the name instead of silently absent.
+
+**Tags** carry one fact each, as `key:value`: `role:`, `detector:`,
+`algorithm:`, `payload:`, `preprocess:`, `lr:`, `seeds:`, one `domain:` for
+each trained domain and one `direction:` for each evaluated direction. Tags
+passed with `--wandb-tags` are added to these, not instead of them.
+
+**Group** is `<algorithm><payload>-<preprocess>-<first 8 of the manifest
+SHA-256>`, for example `suniward040-crop-f271f135`. Stages run as separate
+commands, and the group is what puts them back together. The manifest hash is
+in the group, so two cohorts with the same settings never merge.
+
+`--wandb-run-name` still overrides the derived name. Use it only when you need
+a name the convention cannot express, and expect to explain the name later.
+
 One W&B run represents the complete command. It records separate training and
 validation curves for every seed and training domain, per-seed metrics for all
 six evaluation directions, an evaluation table with confusion-matrix cells,
