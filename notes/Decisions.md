@@ -221,3 +221,12 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** A typed name can disagree with what ran, and a derived name cannot. The embedding and the preprocessing are not command arguments: they live in the manifest chain, two steps back from the stego run. The code reads that chain, so the name states the condition even though the person who types the command never writes it. A part that cannot be read prints `unknown`, which makes a missing chain visible instead of absent.
 - **Consequences:** Runs from before this date keep their hand-typed names, and the thesis must map them by date and by W&B run id. The stages of one protocol now share a group, so the W&B interface puts them together. The group holds the manifest hash, so two cohorts with the same settings stay apart.
 - **Related:** `src/tracking/naming.py`, `README.md` section "Run names in W&B".
+
+### 2026-10-14 — End a run name with the timestamp of its results folder
+
+- **Status:** accepted
+- **Context:** The derived run name states the role, the domains, the embedding, the preprocessing, the learning rate and the seeds. Two runs with the same settings therefore get the same name. We ran two pilots on 2026-10-14, and a plain date would not separate them either.
+- **Decision:** End the name with the timestamp part of the results folder, for example `pilot-real-suniward040-crop-lr1e-4-s1-20261014_153201`.
+- **Reasoning:** The stamp does two jobs with one field. It separates two runs that used identical settings. It also names the local folder, so a run in W&B points at `results/srnet_20261014_153201/` without a lookup. A date alone does neither job, because runs on one day collide. W&B records a creation time of its own, and that time does not name the folder.
+- **Consequences:** Names grow by 16 characters. The W&B interface sorts them by the stamp inside a group, which puts a repeat next to the run it repeats.
+- **Related:** [[Decisions]] entry above on derived run names.

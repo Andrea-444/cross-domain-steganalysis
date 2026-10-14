@@ -389,9 +389,12 @@ class TrackedRunIdentityTests(ProtocolHarness, unittest.TestCase):
             captured = self.start_tracked(
                 Path(raw), seeds=[1], directions=["real_to_real", "real_to_ai"]
             )
-        self.assertEqual(
-            captured["name"], "pilot-real-suniward040-crop-lr1e-4-s1"
+        self.assertTrue(
+            captured["name"].startswith("pilot-real-suniward040-crop-lr1e-4-s1-"),
+            captured["name"],
         )
+        stamp = captured["name"].rsplit("-", 1)[-1]
+        self.assertRegex(stamp, r"^\d{8}_\d{6}$")
 
     def test_three_seeds_on_a_subset_is_a_stage(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -424,6 +427,12 @@ class TrackedRunIdentityTests(ProtocolHarness, unittest.TestCase):
             config = json.loads((runs[-1] / "config.json").read_text())
         self.assertEqual(config["role"], "pilot")
         self.assertEqual(config["condition"]["preprocess_mode"], "crop")
-        self.assertEqual(
-            config["tracking"]["run_name"], "pilot-real-suniward040-crop-lr1e-4-s1"
+        self.assertTrue(
+            config["tracking"]["run_name"].startswith(
+                "pilot-real-suniward040-crop-lr1e-4-s1-"
+            )
+        )
+        # The stamp must name the folder the run actually wrote.
+        self.assertTrue(
+            config["tracking"]["run_name"].endswith(runs[-1].name.partition("_")[2])
         )

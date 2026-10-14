@@ -96,19 +96,36 @@ def run_name(
     condition: dict[str, object],
     learning_rate: float,
     seeds: list[int],
+    stamp: str | None = None,
 ) -> str:
+    """Build the run name, with the results-folder stamp at the end.
+
+    The stamp does two jobs. It separates two runs that used identical
+    settings, which the rest of the name cannot do. It also names the local
+    folder: a run called `...-20261014_153201` wrote
+    `results/srnet_20261014_153201/`. A plain date does neither, because two
+    runs on one day collide.
+    """
     algorithm = condition.get("algorithm") or UNKNOWN
     preprocess = condition.get("preprocess_mode") or UNKNOWN
-    return "-".join(
-        [
-            role,
-            "+".join(train_domains),
-            f"{algorithm}{format_payload(condition.get('payload_bpp'))}",
-            str(preprocess),
-            f"lr{format_learning_rate(learning_rate)}",
-            f"s{format_seeds(seeds)}",
-        ]
-    )
+    parts = [
+        role,
+        "+".join(train_domains),
+        f"{algorithm}{format_payload(condition.get('payload_bpp'))}",
+        str(preprocess),
+        f"lr{format_learning_rate(learning_rate)}",
+        f"s{format_seeds(seeds)}",
+    ]
+    if stamp:
+        parts.append(stamp)
+    return "-".join(parts)
+
+
+def results_stamp(run_directory: str | Path) -> str:
+    """The timestamp part of a results folder, `srnet_20261014_153201`."""
+    name = Path(run_directory).name
+    _, _, stamp = name.partition("_")
+    return stamp or name
 
 
 def run_tags(
