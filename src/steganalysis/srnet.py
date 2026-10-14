@@ -216,11 +216,31 @@ def resolve_device(device_name: str | None) -> torch.device:
 
 
 def initialize_srnet(reference_root: str | Path, device: torch.device):
+    """Initialize SRNet with the reference implementation's own scheme.
+
+    The reference applies `weights_init` from its utils module: Xavier uniform
+    on the convolutions, and normal(0, 0.01) on the fully connected layer. We
+    copy the rules rather than import them, because that module runs argparse
+    when it loads.
+
+    The fully connected layer is the part that matters. Xavier on a 512-to-2
+    layer gives a standard deviation near 0.06, so the network starts with
+    large logits and a loss above ln(2). The fastest way down is then to make
+    the output constant, and a measurement showed the network doing exactly
+    that: the output difference between a cover and its own stego fell from
+    1.3e-3 to 6.7e-5 in 200 steps, at every learning rate tested. A small
+    fully connected layer starts the network near ln(2), so that shortcut is
+    not available and the loss can only fall by separating the two classes.
+    """
     srnet_class = load_srnet_class(reference_root)
     model = srnet_class().to(device)
     for module in model.modules():
-        if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.xavier_normal_(module.weight)
+        if isinstance(module, nn.Conv2d):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.2)
+        elif isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.01)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
     return model
