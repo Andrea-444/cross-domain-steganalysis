@@ -421,6 +421,56 @@ python -m src.steganography ledger \
 The ledger is derived from the `config.json` each run writes, so it cannot
 drift from what actually happened.
 
+## Diagnose a Detector Run
+
+When a detector run returns chance accuracy, these checks narrow the cause before
+any GPU time is spent again. Each one writes a JSON report. Copy a report into
+`evidence/` by hand when it is worth keeping.
+
+```bash
+# 1. Do the stego images differ from their covers, and by how much?
+python -m src.steganalysis.diagnostics embedding \
+  --manifest <stego-run>/dataset_manifest.jsonl \
+  --output results/diagnostics/
+
+# 2. Which preprocessing produced the covers behind this run?
+python -m src.steganalysis.diagnostics provenance \
+  --run-config <stego-run>/config.json
+
+# 3. Can a classical feature set find the embedding?
+#    Run the control first: --synthetic replaces the stego images with a
+#    non-adaptive embedding that any working detector finds.
+python -m src.steganalysis.diagnostics classical \
+  --manifest <stego-run>/dataset_manifest.jsonl --synthetic
+python -m src.steganalysis.diagnostics classical \
+  --manifest <stego-run>/dataset_manifest.jsonl
+
+# 4. Does the detector keep its sensitivity to the embedding while it trains?
+python -m src.steganalysis.diagnostics collapse \
+  --manifest <stego-run>/dataset_manifest.jsonl --steps 200
+
+# 5. Can the detector learn an embedding that is easy to see?
+python -m src.steganalysis.diagnostics synthetic-train \
+  --manifest <stego-run>/dataset_manifest.jsonl --epochs 60
+```
+
+Read them in this order. Checks 1 and 2 test the data, check 3 tests the data
+without the detector, and checks 4 and 5 test the detector. A check that tests
+the detector means nothing until the checks before it have passed.
+
+Two readings carry most of the weight:
+
+- **`classical`** reports `test_roc_auc` with `roc_auc_chance_error` and
+  `roc_auc_z_score` beside it. A z-score above 2 means the area under the curve
+  is far enough from 0.5 to take seriously. Always run `--synthetic` first: it
+  says whether the feature code works, and without it a result of 0.5 has two
+  possible meanings.
+- **`collapse`** reports `pair_gap_ratio`, which is how much of the output of
+  the detector follows the embedding rather than the picture. A ratio that holds
+  or rises means the detector keeps its sensitivity. A ratio that falls means it
+  is learning to answer the same thing for every image, and more training time
+  does not repair that.
+
 ## Run Cross-Domain SRNet Experiments
 
 ```bash
