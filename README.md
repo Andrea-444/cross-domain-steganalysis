@@ -571,12 +571,17 @@ The run name, tags and group are **derived from the run**, not typed. A name
 that was typed can disagree with what ran; a derived one cannot.
 
 ```text
-<role>-<domains>-<algorithm><payload>-<preprocess>-lr<rate>-s<seeds>
+<role>-<domains>-<algorithm><payload>-<preprocess>-lr<rate>-s<seeds>-<stamp>
 
-pilot-real-suniward040-crop-lr1e-4-s1
-stage-ai-suniward040-crop-lr1e-4-s1-2-3
-full-real+ai+mixed-suniward040-crop-lr1e-4-s1-2-3
+pilot-real-suniward040-crop-lr1e-4-s1-20261014_153201
+stage-ai-suniward040-crop-lr1e-4-s1-2-3-20261015_090412
+full-real+ai+mixed-suniward040-crop-lr1e-4-s1-2-3-20261016_221015
 ```
+
+The stamp is the timestamp of the results folder the run wrote, so
+`...-20261014_153201` wrote `results/srnet_20261014_153201/`. It also separates
+two runs that used identical settings, which the rest of the name cannot do. A
+plain date would not: two runs on one day collide.
 
 | Part | Where it comes from |
 |---|---|
@@ -586,6 +591,7 @@ full-real+ai+mixed-suniward040-crop-lr1e-4-s1-2-3
 | `preprocess` | the preparation config, two steps back along the manifest chain |
 | `rate` | `--learning-rate` |
 | `seeds` | `--seeds` |
+| `stamp` | the results folder this run wrote |
 
 A part that cannot be read prints `unknown` rather than being omitted, so a
 missing chain is visible in the name instead of silently absent.

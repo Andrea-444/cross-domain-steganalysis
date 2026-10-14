@@ -25,6 +25,7 @@ from src.steganalysis.srnet import (
 )
 from src.tracking.naming import (
     manifest_condition,
+    results_stamp,
     run_group,
     run_name,
     run_role,
@@ -313,6 +314,7 @@ def run_srnet_protocol(
         condition=condition,
         learning_rate=learning_rate,
         seeds=seeds,
+        stamp=results_stamp(run_dir),
     )
     derived_tags = run_tags(
         role=role,

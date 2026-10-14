@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.tracking.naming import (
     format_learning_rate,
+    results_stamp,
     format_payload,
     format_seeds,
     manifest_condition,
@@ -149,3 +150,31 @@ class ManifestConditionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StampTests(unittest.TestCase):
+    def test_stamp_is_the_part_after_the_detector_name(self) -> None:
+        self.assertEqual(results_stamp("results/srnet_20261014_153201"), "20261014_153201")
+
+    def test_a_folder_with_no_underscore_returns_its_own_name(self) -> None:
+        self.assertEqual(results_stamp("results/custom"), "custom")
+
+    def test_stamp_goes_last_in_the_name(self) -> None:
+        name = run_name(role="pilot", train_domains=["real"], condition=CONDITION,
+                        learning_rate=1e-4, seeds=[1], stamp="20261014_153201")
+        self.assertEqual(name, "pilot-real-suniward040-crop-lr1e-4-s1-20261014_153201")
+
+    def test_two_runs_with_identical_settings_get_different_names(self) -> None:
+        """This is the whole reason for the stamp."""
+        first = run_name(role="pilot", train_domains=["real"], condition=CONDITION,
+                         learning_rate=1e-4, seeds=[1], stamp="20261014_092000")
+        second = run_name(role="pilot", train_domains=["real"], condition=CONDITION,
+                          learning_rate=1e-4, seeds=[1], stamp="20261014_153201")
+        self.assertNotEqual(first, second)
+
+    def test_no_stamp_leaves_the_name_unchanged(self) -> None:
+        self.assertEqual(
+            run_name(role="pilot", train_domains=["real"], condition=CONDITION,
+                     learning_rate=1e-4, seeds=[1]),
+            "pilot-real-suniward040-crop-lr1e-4-s1",
+        )
