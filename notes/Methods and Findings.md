@@ -18,12 +18,12 @@ Per `agent-instructions/RESULTS_AND_WRITING.md`, **measured observations and
 interpretation are kept separate throughout**. Anything labelled
 *Interpretation* is an inference, not a result.
 
-> [!warning] No experimental result exists yet
-> Every number below comes from **methodological validation**, not from the
-> research experiment. Stage 1 of the six-direction protocol ran on 2026-10-12
-> and returned chance accuracy from a fault in the detector configuration. See
-> section 6. Nothing here answers the thesis questions. It establishes whether
-> the dataset and pipeline can answer them.
+> [!warning] No multi-seed result exists yet
+> Sections 1 to 6 come from **methodological validation**, not from the
+> research experiment. Section 7 holds the first working detector, from a
+> **single-seed pilot** on 2026-10-14. One seed carries no spread, so no claim
+> in the thesis comes from it. Research question 1 has no evidence at all,
+> because `ai_to_ai` has never run.
 
 ## 1. Cover-domain confound investigation
 
@@ -491,14 +491,150 @@ returned 0.4975, and I nearly read it as evidence against the data. A second
 run used a synthetic embedding and returned 0.9522, which showed that the
 instrument works. The 0.5578 on real data then became interpretable.
 
-### 6.9 Open
+### 6.9 Closed on 2026-10-14
 
-The control used an easy embedding. S-UNIWARD at 0.4 bpp is much harder, and
-the classical detector finds it at ROC-AUC 0.5578. Whether a learning rate of
-1e-4 is enough for the real task is **not yet measured**. The pilot that tests
-it repeats stage 1 exactly, with one change: `real_to_real`, one seed, 150
-epochs, batch size 32, learning rate 1e-4.
+The pilot ran and the question is answered. A learning rate of 1e-4 is enough
+for the real task: `real_to_real` reached 0.7228 balanced accuracy and 0.8323
+ROC-AUC on S-UNIWARD at 0.4 bpp. Section 7 holds that result.
 
-Until that pilot finishes, the established claim is narrow: the detector learns
-an easy embedding, and the learning rate of 1e-3 prevented it from learning
-anything.
+The cause stated in 6.4 is confirmed by the learning curve. At 1e-4 the network
+held ln(2) for 17 epochs and then escaped. At 1e-3 it did 36,450 steps and never
+escaped. The learning rate did not slow the escape. It prevented it.
+
+## 7. First working detector: the 1e-4 pilot
+
+### 7.1 The run
+
+One seed, `real_to_real` and `real_to_ai`, 150 epochs, batch size 32, learning
+rate 1e-4. The two directions come from one trained model, so the second is an
+evaluation and not a second training.
+
+| | |
+|---|---|
+| manifest | `conseal_suniward_p040_20261007_143130`, SHA-256 `f271f135...` |
+| embedding | S-UNIWARD, 0.4 bpp, a separate seed for each of 11,660 images |
+| covers | 3,887 train, 969 validation, 974 test, for each domain |
+| preprocessing | native centre crop, 256x256, grayscale PNG |
+| detector | SRNet at commit `2c838cf7` |
+| repository | commit `8b14ca35`, clean |
+| hardware | RTX 5080, kernel driver 595.84, CUDA runtime 13.0 |
+| duration | 6,670 seconds |
+| W&B | run `o3quu45i` |
+| checkpoint | epoch 148 of 150, by validation loss |
+
+### 7.2 Same-domain result
+
+| Metric | `real_to_real` |
+|---|---|
+| accuracy | 0.7228 |
+| balanced accuracy | 0.7228 |
+| precision | 0.7136 |
+| recall | 0.7444 |
+| F1 | 0.7286 |
+| specificity | 0.7012 |
+| false positive rate | 0.2988 |
+| false negative rate | 0.2556 |
+| detection error `P_E` | 0.2772 |
+| MCC | 0.4460 |
+| ROC-AUC | 0.8323 |
+| PR-AUC | 0.8434 |
+| EER | 0.2752 |
+| confusion matrix | 683, 291 / 249, 725 |
+
+The same command at learning rate 1e-3 gave exactly 0.5000. This is the first
+evidence in the project that S-UNIWARD at 0.4 bpp is detectable in these covers.
+
+### 7.3 Cross-domain result
+
+| Metric | `real_to_ai` |
+|---|---|
+| accuracy | 0.5000 |
+| balanced accuracy | 0.5000 |
+| specificity | 0.0503 |
+| false positive rate | 0.9497 |
+| detection error `P_E` | 0.5000 |
+| MCC | 0.0000 |
+| ROC-AUC | 0.4970 |
+| PR-AUC | 0.4971 |
+| EER | 0.5010 |
+| confusion matrix | 49, 925 / 49, 925 |
+
+Two separate failures sit inside that column, and they must stay separate.
+
+**The decision threshold does not hold.** The detector calls 95 per cent of AI
+images stego, with or without a payload. A detector trained on photographs
+treats AI covers as suspicious before any embedding.
+
+**The ranking carries no information either.** ROC-AUC is 0.4970. A threshold
+fault alone leaves the area under the curve high, and recalibration repairs it.
+This one cannot be repaired that way.
+
+The confusion matrix holds the same row twice. In the AI domain a cover and its
+stego twin receive the same answer every time, so the accuracy is 0.5000 by
+construction. The features this detector learned do not respond to S-UNIWARD
+traces in AI covers.
+
+### 7.4 Paired generalization gaps
+
+Each gap is `real_to_real` minus `real_to_ai`, inside the one seed.
+
+| Metric | Gap |
+|---|---|
+| balanced accuracy | +0.2228 |
+| ROC-AUC | +0.3352 |
+| PR-AUC | +0.3463 |
+| MCC | +0.4460 |
+| specificity | +0.6509 |
+| false positive rate | -0.6509 |
+| detection error | -0.2228 |
+| EER | -0.2259 |
+
+### 7.5 The learning curve
+
+Two features of the curve matter more than the final number.
+
+**A plateau of 17 epochs.** The train loss held 0.6931 from epoch 1 to epoch
+17. It moved at epoch 18 and the network learned from there. At 1e-3 the same
+model did 36,450 steps and never left that plateau.
+
+**The training did not finish.** The selected checkpoint is epoch 148 of 150.
+Validation balanced accuracy was 0.663 at epoch 100, 0.707 at epoch 130 and
+0.724 at epoch 150. Train accuracy was 0.7336 against validation 0.7239, so the
+model was not overfitting and had room to continue.
+
+> [!important] 0.7228 is a lower bound
+> A best checkpoint at the end of the budget means the budget was too small.
+> The ceiling of this detector on this data is not measured.
+
+### 7.6 Interpretation
+
+*Interpretation, not measurement.* The cross-domain failure is consistent with
+cover-source mismatch at full strength. The same detector that separates clean
+from stego at 0.83 ROC-AUC inside its own domain carries no usable signal in
+the other domain, and it treats almost every AI cover as stego. The domain
+probe measured 0.9959 balanced accuracy between the domains on clean covers
+alone, so the detector sees a large domain difference before any embedding.
+
+### 7.7 What this does not establish
+
+**One seed.** Every standard deviation in the summary is 0.0 because one value
+has no spread. No claim in the thesis comes from this run.
+
+**The cause of the cross-domain failure is still undetermined.** Two
+explanations remain. The embedding traces differ between the domains, or the AI
+covers lie outside the training distribution of this detector. This pilot
+cannot separate them. The mixed-domain detector was built for exactly this, and
+it is now required rather than optional.
+
+**No AI-domain result exists.** `ai_to_ai` has never run, so research question
+1 has no evidence at all.
+
+### 7.8 Consequence for the protocol
+
+The stages run at 300 epochs rather than 150, at learning rate 1e-4, with three
+seeds. See [[Decisions]], 2026-10-15.
+
+One risk to watch in the per-seed histories: each seed escapes the plateau at
+its own epoch. A seed that escapes late receives less effective training, and
+the spread across seeds would then measure the escape epoch rather than the
+variance of the detector.

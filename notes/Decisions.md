@@ -230,3 +230,13 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** The stamp does two jobs with one field. It separates two runs that used identical settings. It also names the local folder, so a run in W&B points at `results/srnet_20261014_153201/` without a lookup. A date alone does neither job, because runs on one day collide. W&B records a creation time of its own, and that time does not name the folder.
 - **Consequences:** Names grow by 16 characters. The W&B interface sorts them by the stamp inside a group, which puts a repeat next to the run it repeats.
 - **Related:** [[Decisions]] entry above on derived run names.
+
+### 2026-10-15 — Train for 300 epochs at learning rate 1e-4
+
+- **Status:** accepted
+- **Context:** The pilot of 2026-10-14 trained for 150 epochs at learning rate 1e-4 and reached 0.7228 balanced accuracy on `real_to_real`. Its learning curve shows two things. The train loss held ln(2) for 17 epochs before the network escaped. The selected checkpoint is epoch 148 of 150, and validation balanced accuracy rose from 0.663 at epoch 100 to 0.724 at epoch 150. Train accuracy was 0.7336 against validation 0.7239, so the model was not overfitting.
+- **Decision:** Run the stages at 300 epochs, at learning rate 1e-4, with three seeds. Keep batch size 32.
+- **Reasoning:** A best checkpoint at the end of the budget means the budget was too small. The curve was still rising and the model was not overfitting, so 0.7228 is a lower bound and not the ceiling of this detector. The earlier default of 1e-3 is rejected: at that rate the same model did 36,450 steps and never left the ln(2) plateau.
+- **Consequences:** One training takes about 3.7 hours instead of 1.85. One stage of three seeds takes about 11 hours. One embedding condition, which is three domains and three seeds, takes about 33 hours. The accepted embedding matrix of S-UNIWARD at 0.4 and 0.2, plus MiPOD at 0.4, therefore needs approximately 100 hours of GPU. That number decides how much of the matrix the thesis carries.
+- **Risk to watch:** Each seed escapes the ln(2) plateau at its own epoch. A seed that escapes late receives less effective training. The spread across seeds would then measure the escape epoch and not the variance of the detector. Check the escape epoch in each per-seed history before reading the spread.
+- **Related:** [[Methods and Findings]] section 7.
