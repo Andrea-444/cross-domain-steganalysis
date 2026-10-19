@@ -240,3 +240,12 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Consequences:** One training takes about 3.7 hours instead of 1.85. One stage of three seeds takes about 11 hours. One embedding condition, which is three domains and three seeds, takes about 33 hours. The accepted embedding matrix of S-UNIWARD at 0.4 and 0.2, plus MiPOD at 0.4, therefore needs approximately 100 hours of GPU. That number decides how much of the matrix the thesis carries.
 - **Risk to watch:** Each seed escapes the ln(2) plateau at its own epoch. A seed that escapes late receives less effective training. The spread across seeds would then measure the escape epoch and not the variance of the detector. Check the escape epoch in each per-seed history before reading the spread.
 - **Related:** [[Methods and Findings]] section 7.
+
+### 2026-10-19 — Training curves go to the W&B history, final metrics go to the summary
+
+- **Status:** accepted
+- **Context:** A single-seed run with two directions created 137 panels in W&B. A full run of three seeds and six directions would create about 615. Almost every panel held one value, so it drew a bar chart with one bar. Andrea asked for graphs that show a change or a comparison.
+- **Decision:** Write the training curves to the run history with `log`. Write the aggregate for each direction, and each paired gap, to the run summary with `summary.update`. Keep the per-seed and per-direction detail in the `evaluation/results` table. Remove the per-seed scalar logging.
+- **Reasoning:** W&B draws a panel for every key it finds in the history of a run. A key belongs there only if its value changes inside the run, which is true of a training curve and false of a final metric. The summary holds the same numbers as columns of the runs table, where they compare across runs. That is the only comparison a final metric supports, because inside one run it is a single number. The table already held the per-seed detail, so the scalar logging was a second home for numbers that already had one.
+- **Consequences:** A single-seed run now creates 8 panels instead of 137, and 95 values move to the runs table. Runs from before this date keep their panels. To compare runs, add the summary keys as columns of the runs table, or build a bar chart across runs from one of them.
+- **Related:** `src/tracking/wandb.py`, `README.md` section "Where each number goes in W&B".

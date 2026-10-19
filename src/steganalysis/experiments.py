@@ -421,8 +421,6 @@ def run_srnet_protocol(
             )
             metrics = calculate_metrics(labels, predictions, probabilities)
             direction_results[name] = metrics
-            if tracker is not None:
-                tracker.log_evaluation(seed, name, metrics)
             write_predictions(
                 run_dir / "predictions" / f"seed{seed}_{name}.jsonl",
                 image_ids, labels, predictions, probabilities, test_domain,

@@ -609,6 +609,25 @@ in the group, so two cohorts with the same settings never merge.
 `--wandb-run-name` still overrides the derived name. Use it only when you need
 a name the convention cannot express, and expect to explain the name later.
 
+### Where each number goes in W&B
+
+Three places, three kinds of number. W&B draws a panel for every key in a run's
+**history**, so a final metric logged there becomes a chart with a single bar.
+
+| Place | Written with | Holds | Why |
+|---|---|---|---|
+| history | `run.log` | the training curves | they change over epochs, so a chart shows something |
+| summary | `run.summary.update` | the aggregate for each direction, and each paired gap | columns of the runs table, which compare **across** runs |
+| table | `evaluation/results` | one row for each seed and direction, every metric and the four confusion cells | per-seed detail, in the shape detail belongs in |
+
+A single-seed, two-direction run used to create 137 panels. It now creates 8,
+and 95 values move to the runs table instead. A full three-seed, six-direction
+run would have created about 615.
+
+To compare runs, add the summary keys as columns in the runs table, or build a
+bar chart across runs from one of them. A panel inside one run cannot make that
+comparison, because it holds one value.
+
 One W&B run represents the complete command. It records separate training and
 validation curves for every seed and training domain, per-seed metrics for all
 six evaluation directions, an evaluation table with confusion-matrix cells,
