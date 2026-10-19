@@ -249,3 +249,21 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** W&B draws a panel for every key it finds in the history of a run. A key belongs there only if its value changes inside the run, which is true of a training curve and false of a final metric. The summary holds the same numbers as columns of the runs table, where they compare across runs. That is the only comparison a final metric supports, because inside one run it is a single number. The table already held the per-seed detail, so the scalar logging was a second home for numbers that already had one.
 - **Consequences:** A single-seed run now creates 8 panels instead of 137, and 95 values move to the runs table. Runs from before this date keep their panels. To compare runs, add the summary keys as columns of the runs table, or build a bar chart across runs from one of them.
 - **Related:** `src/tracking/wandb.py`, `README.md` section "Where each number goes in W&B".
+
+### 2026-10-19 — Decide the seed count from the measured spread, not in advance
+
+- **Status:** accepted
+- **Context:** The accepted protocol asks for three seeds in each direction. Two seeds on natural covers now exist, and they agree to 0.0005 in balanced accuracy and 0.0001 in area under the curve. The effects under study are 0.1366 for research question 1 and about 0.13 between the mixed detector and the failed transfers. The effect is therefore approximately 250 times the seed noise. A third seed costs 3.7 hours in each domain.
+- **Decision:** Run a second seed for the AI detector and for the mixed detector first. Then read the spread in each of the three domains. Keep two seeds if every spread stays near 0.001. Run the third seed in a domain whose spread is larger.
+- **Reasoning:** The two runs are needed under every plan, so nothing is lost by starting them before the decision. A seed count chosen in advance either wastes GPU time or hides instability. A seed count chosen from the measured spread does neither, and the measurement itself goes in the thesis as the justification. Natural covers are stable, and that says nothing about AI or mixed. The AI detector left the ln(2) plateau at epoch 7 and reached a lower ceiling. The mixed detector trains on two distributions at once.
+- **Consequences:** The seed count can differ between domains, and the thesis must state the count and the spread for each. A report of two seeds needs the measured spread beside it. A standard deviation from two values carries one degree of freedom, and it supports no test.
+- **Related:** [[Methods and Findings]] section 8.2.
+
+### 2026-10-19 — A larger budget belongs in a separate condition
+
+- **Status:** accepted
+- **Context:** Every detector stopped while still improving, so every result is a lower bound. Doubling from 150 to 300 epochs on natural covers gained 0.038 balanced accuracy and 0.046 area under the curve from the same 3,887 pairs. The question of whether the conclusions survive more training is open.
+- **Decision:** Keep 300 epochs for every seed of the current condition. Test a larger budget as a separate, separately labelled condition, with one seed for each domain at the new budget.
+- **Reasoning:** Seeds inside one condition must share a budget. Two seeds at 300 and one at 600 cannot be averaged, and a condition where the seeds differ in budget is not a condition. The open question is whether the size of each effect survives more training, and one seed for each domain answers that. It is a sensitivity test and not a replacement for the primary result.
+- **Consequences:** The primary result stays at 300 epochs with its stated lower-bound limitation. A budget sensitivity condition costs about 22 hours for three domains at 600 epochs. Do not reach a larger budget by resuming from a saved checkpoint. The checkpoint holds the weights and not the optimizer state. A resumed run is therefore a fine-tune from weights, and not the same as a longer continuous run.
+- **Related:** [[Methods and Findings]] section 8.2.

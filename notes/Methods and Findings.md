@@ -18,12 +18,17 @@ Per `agent-instructions/RESULTS_AND_WRITING.md`, **measured observations and
 interpretation are kept separate throughout**. Anything labelled
 *Interpretation* is an inference, not a result.
 
-> [!warning] No multi-seed result exists yet
+> [!warning] Status on 2026-10-19
 > Sections 1 to 6 come from **methodological validation**, not from the
 > research experiment. Section 7 holds the first working detector, from a
-> **single-seed pilot** on 2026-10-14. One seed carries no spread, so no claim
-> in the thesis comes from it. Research question 1 has no evidence at all,
-> because `ai_to_ai` has never run.
+> single-seed pilot. **Section 8 holds the first evidence for both research
+> questions**, from all six directions at 300 epochs.
+>
+> Natural covers have two seeds that agree to 0.0005. AI and mixed have one
+> seed each, and their repeats started on 2026-10-19. Treat section 8 as
+> measured and not yet final: a direction with one seed carries no spread.
+> Every detector also stopped while still improving, so every value is a
+> lower bound.
 
 ## 1. Cover-domain confound investigation
 
@@ -638,3 +643,157 @@ One risk to watch in the per-seed histories: each seed escapes the plateau at
 its own epoch. A seed that escapes late receives less effective training, and
 the spread across seeds would then measure the escape epoch rather than the
 variance of the detector.
+
+## 8. The six directions: first evidence for both research questions
+
+### 8.1 What exists
+
+Four trained detectors, all at 300 epochs, learning rate 1e-4, batch size 32,
+on manifest `f271f135` from repository commit `d5168c07`.
+
+| Run | Domain | Seed | Folder |
+|---|---|---|---|
+| 1 | real | 1 | `srnet_20261015_112246` |
+| 2 | ai | 1 | `srnet_20261015_182123` |
+| 3 | mixed | 1 | `srnet_20261016_173640` |
+| 4 | real | 2 | `srnet_20261017_121320` |
+
+Each detector is evaluated on both test domains, so four trainings give eight
+evaluations and cover all six directions.
+
+### 8.2 Validity of the runs
+
+| Run | Escape epoch | Selected epoch | Train minus validation |
+|---|---|---|---|
+| real seed 1 | 19 | 287 / 300 | +0.0384 |
+| real seed 2 | 33 | 289 / 300 | +0.0362 |
+| ai seed 1 | 7 | 244 / 300 | +0.0366 |
+| mixed seed 1 | 18 | 298 / 300 | +0.0382 |
+
+**The escape-epoch risk did not occur.** Section 7.8 warned that a domain that
+leaves the ln(2) plateau late would receive less effective training, and that
+the spread would then measure the escape epoch. AI left the plateau first, at
+epoch 7. No domain was handicapped.
+
+**Every detector is still undertrained.** Each selected checkpoint sits near
+the end of its budget, so every value below is a lower bound. The train minus
+validation difference is close to +0.037 in all four, so they are undertrained
+by the same amount and the comparison between them stays fair.
+
+The budget, and not the quantity of data, is the limit that binds. The same
+3,887 training pairs gave 0.7228 balanced accuracy at 150 epochs and 0.7608 at
+300. A limit of data volume would show as a large train minus validation
+difference, and the measured difference is small.
+
+**Reproducibility is high.** Two independent trainings on natural covers:
+
+| | seed 1 | seed 2 | difference |
+|---|---|---|---|
+| balanced accuracy | 0.7608 | 0.7613 | 0.0005 |
+| ROC-AUC | 0.8780 | 0.8781 | 0.0001 |
+| MCC | 0.5238 | 0.5238 | 0.0000 |
+
+### 8.3 All six directions, seed 1
+
+| Direction | Balanced acc | ROC-AUC | `P_E` | MCC | EER | Specificity | Recall |
+|---|---|---|---|---|---|---|---|
+| `real_to_real` | 0.7608 | 0.8780 | 0.2392 | 0.5238 | 0.2361 | 0.7146 | 0.8070 |
+| `ai_to_ai` | 0.6242 | 0.7034 | 0.3758 | 0.2485 | 0.3747 | 0.6170 | 0.6314 |
+| `mixed_to_real` | 0.6427 | 0.7553 | 0.3573 | 0.3199 | 0.3368 | 0.8686 | 0.4168 |
+| `mixed_to_ai` | 0.6304 | 0.7192 | 0.3696 | 0.2617 | 0.3634 | 0.6715 | 0.5893 |
+| `real_to_ai` | 0.5077 | 0.5288 | 0.4923 | 0.0292 | 0.4774 | 0.0832 | 0.9322 |
+| `ai_to_real` | 0.5072 | 0.5262 | 0.4928 | 0.0162 | 0.4856 | 0.7392 | 0.2751 |
+
+Confusion matrices, as clean row then stego row:
+
+```text
+real_to_real   696  278 / 188  786
+ai_to_ai       601  373 / 359  615
+mixed_to_real  846  128 / 568  406
+mixed_to_ai    654  320 / 400  574
+real_to_ai      81  893 /  66  908
+ai_to_real     720  254 / 706  268
+```
+
+### 8.4 Research question 1
+
+Under the same algorithm, payload, preprocessing, detector and budget, only the
+cover domain changes.
+
+| | balanced acc | ROC-AUC | `P_E` |
+|---|---|---|---|
+| `real_to_real` | 0.7608 | 0.8780 | 0.2392 |
+| `ai_to_ai` | 0.6242 | 0.7034 | 0.3758 |
+| difference | **-0.1366** | **-0.1746** | **+0.1366** |
+
+*Measurement.* S-UNIWARD at 0.4 bpp is harder to detect in AI covers than in
+natural covers, by 13.7 points of balanced accuracy and 17.5 points of area
+under the curve.
+
+The seed-to-seed difference on natural covers is 0.0005, so the effect is
+roughly 250 times the seed noise. The AI domain has one seed at the time of
+writing, so the claim waits for its repeat.
+
+### 8.5 Research question 2, and what the mixed control decides
+
+| Direction | balanced acc | ROC-AUC |
+|---|---|---|
+| `real_to_ai` | 0.5077 | 0.5288 |
+| `ai_to_real` | 0.5072 | 0.5262 |
+| `mixed_to_real` | 0.6427 | 0.7553 |
+| `mixed_to_ai` | 0.6304 | 0.7192 |
+
+Both transfers fall to chance, and they fall by the same amount in each
+direction. A detector trained on one domain carries no usable signal into the
+other, at any threshold.
+
+**The mixed detector works in both domains.** This is the measurement the
+control was built to supply, and it separates the two explanations that
+section 1 of this note could not separate.
+
+*Interpretation.* The embedding traces are **not** incompatible between the
+domains. One detector that has seen both finds the embedding in both. The
+cross-domain collapse is distribution shift, and not a difference in what
+S-UNIWARD leaves behind.
+
+### 8.6 The two transfer failures are mirror images
+
+| | specificity | recall |
+|---|---|---|
+| `real_to_ai` | 0.0832 | 0.9322 |
+| `ai_to_real` | 0.7392 | 0.2751 |
+
+A detector trained on natural covers calls 93 per cent of AI images stego. A
+detector trained on AI covers calls 74 per cent of natural images clean.
+
+*Interpretation.* One cause seen from two sides. The decision boundary sits at
+the wrong place for the residual statistics of the other domain. The natural
+detector reads the residual of an AI cover as evidence of embedding. The AI
+detector reads the residual of a natural cover as evidence of a clean image.
+
+### 8.7 A design effect that must not be read as a finding
+
+`mixed_to_real` at 0.6427 is well below `real_to_real` at 0.7608. Part of that
+distance is built into the design and is not a result.
+
+The mixed training set holds the **same total** as a single-domain set, which
+is 3,887 pairs. Half come from each domain, so it holds about 1,944 natural
+pairs against the 3,887 of the specialist. The mixed detector trains on half
+the natural data.
+
+The same design makes the AI side more interesting. `mixed_to_ai` at 0.6304
+matches `ai_to_ai` at 0.6242 while using half the AI data. Detection in the AI
+domain appears to be limited by something other than the quantity of data.
+
+### 8.8 What is still missing
+
+**Seeds.** AI and mixed have one seed each. Two more runs were started on
+2026-10-19. Nothing in sections 8.4 to 8.7 is a final claim until the repeats
+exist.
+
+**An aggregator.** Each run folder holds one seed, so every standard deviation
+in every `summary.json` is 0.0. No file holds the cross-seed means, spreads or
+paired gaps that the results chapter reports.
+
+**A ceiling.** Every detector stopped while still improving. The absolute
+values are floors, and the size of each effect is measured between floors.
