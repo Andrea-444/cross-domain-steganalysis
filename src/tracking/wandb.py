@@ -44,7 +44,23 @@ def evaluation_rows(runs: list[dict[str, Any]]) -> list[list[Any]]:
 
 
 class WandbExperimentTracker:
-    """Optional live tracking for one complete SRNet protocol invocation."""
+    """Optional live tracking for one complete SRNet protocol invocation.
+
+    Three places hold three kinds of number, and the split is deliberate.
+
+    The **history**, written with `log`, holds the training curves only. Those
+    change over epochs, so a panel of one shows something. W&B draws a panel
+    for every key in the history, so a final metric written here becomes a
+    chart with a single bar.
+
+    The **summary**, written with `summary.update`, holds the aggregate for
+    each direction and each paired gap. These appear as columns of the runs
+    table and compare across runs, which is the comparison they support.
+
+    The **table** `evaluation/results` holds one row for each seed and
+    direction, with every metric and the four confusion-matrix cells. That is
+    the per-seed detail, and a table is the right shape for it.
+    """
 
     def __init__(
         self,
@@ -119,35 +135,16 @@ class WandbExperimentTracker:
 
         self._try("epoch logging", log)
 
-    def log_evaluation(
-        self,
-        seed: int,
-        direction: str,
-        metrics: dict[str, Any],
-    ) -> None:
-        prefix = f"evaluation/seed_{seed}/{direction}"
-        values = {
-            f"{prefix}/{key}": float(value)
-            for key, value in metrics.items()
-            if isinstance(value, (int, float)) and value is not None
-        }
-        matrix = metrics.get("confusion_matrix")
-        if isinstance(matrix, list) and len(matrix) == 2:
-            values.update(
-                {
-                    f"{prefix}/true_clean": float(matrix[0][0]),
-                    f"{prefix}/false_stego": float(matrix[0][1]),
-                    f"{prefix}/missed_stego": float(matrix[1][0]),
-                    f"{prefix}/true_stego": float(matrix[1][1]),
-                }
-            )
-        self._try("evaluation logging", lambda: self.run.log(values))
-
     def finish(self, result: dict[str, Any], run_directory: str | Path) -> dict[str, Any]:
         run_directory = Path(run_directory)
 
         def log_final() -> None:
-            self.run.log(_flatten_summary(result.get("summary", {})))
+            # summary, not log. A value written with `log` enters the run
+            # history, and W&B draws a panel for every key it finds there. One
+            # value then becomes a chart with one bar. The summary holds the
+            # same numbers as columns of the runs table, where they compare
+            # across runs, which is the only comparison these numbers support.
+            self.run.summary.update(_flatten_summary(result.get("summary", {})))
             table = self._wandb.Table(columns=EVALUATION_COLUMNS)
             for row in evaluation_rows(result.get("runs", [])):
                 table.add_data(*row)
@@ -235,7 +232,7 @@ def log_pipeline_run(
     if run is None:
         raise RuntimeError("W&B did not create a run.")
 
-    run.log(
+    run.summary.update(
         {
             "pipeline/completed_stages": sum(
                 stage.get("status") == "completed"
