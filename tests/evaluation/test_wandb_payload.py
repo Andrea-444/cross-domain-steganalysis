@@ -61,7 +61,7 @@ class FlattenSummaryTests(unittest.TestCase):
                     "balanced_accuracy_mean": 0.3,
                     "balanced_accuracy_std": 0.05,
                     "balanced_accuracy_per_seed": [0.25, 0.35],
-                    "same_domain": "real_to_real",
+                    "first_direction": "real_to_real",
                     "seeds": 2,
                 },
             },
@@ -78,7 +78,7 @@ class FlattenSummaryTests(unittest.TestCase):
             "generalization_gaps": {
                 "real_to_real_minus_real_to_ai": {
                     "balanced_accuracy_per_seed": [0.25, 0.35],
-                    "same_domain": "real_to_real",
+                    "first_direction": "real_to_real",
                 },
             },
         })

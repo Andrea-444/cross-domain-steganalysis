@@ -851,26 +851,48 @@ score. `P_E` is `null` when either of its two rates is. The equal error rate is
 `summary.json` carries a `generalization_gaps` block:
 
 ```text
-real_to_real_minus_real_to_ai
-ai_to_ai_minus_ai_to_real
+real_to_real_minus_real_to_ai     kind: transfer
+ai_to_ai_minus_ai_to_real         kind: transfer
+mixed_to_real_minus_mixed_to_ai   kind: test_domain
 ```
 
-Each gap is `same_domain - cross_domain`, **computed inside one seed and only
-then averaged**, so the same trained model supplies both terms. Differencing
-the means instead would discard the pairing and let seed-to-seed variation
-inflate the spread. Each entry reports the per-seed values, their mean and
-their standard deviation.
+Each gap is `first - second`, **computed inside one seed and only then
+averaged**, so the same trained model supplies both terms. Differencing the
+means instead would discard the pairing and let seed-to-seed variation inflate
+the spread. Each entry reports the per-seed values, their mean, their standard
+deviation, the two direction names and its `kind`.
+
+The two kinds answer different questions, and the difference matters.
+
+**`transfer`** holds the detector fixed and moves the test domain away from
+its own. It measures what the detector loses when the cover source changes.
+
+**`test_domain`** holds fixed a detector that trained on both domains, and
+moves the test domain between them. Neither domain is foreign to it and
+neither carries a training advantage, so the difference isolates the cover
+domain itself.
+
+That isolation is why the mixed pair exists. Comparing `real_to_real` with
+`ai_to_ai` changes the training domain **and** the test domain at once, so a
+difference between them mixes the difficulty of the cover domain with how much
+each detector gained from its own training data. The mixed pair changes one
+thing.
 
 Read the sign with the metric in mind. For a metric where higher is better,
-such as balanced accuracy, a positive gap means the detector degraded across
-domains. For an error metric such as `detection_error` or `eer`, the sign
-reverses and a negative gap means degradation.
+such as balanced accuracy, a positive `transfer` gap means the detector
+degraded across domains, and a positive `test_domain` gap means the second
+domain is the harder one. For an error metric such as `detection_error` or
+`eer`, the sign reverses.
 
 For multiple seeds, `summary.json` reports metric mean and standard deviation.
 
 Primary interpretation:
 
-- Compare `AI -> AI` with `real -> real` to study intrinsic domain difficulty.
+- Compare `AI -> AI` with `real -> real` for domain difficulty, and read it
+  together with `mixed_to_real_minus_mixed_to_ai`. The first changes the
+  training domain and the test domain together; the second changes only the
+  test domain. If they disagree, the training domain is carrying part of the
+  difference.
 - Compare `real -> AI` with `real -> real` to measure transfer from conventional training.
 - Use `AI -> real` as the reverse-transfer control.
 
