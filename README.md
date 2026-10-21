@@ -421,6 +421,44 @@ python -m src.steganography ledger \
 The ledger is derived from the `config.json` each run writes, so it cannot
 drift from what actually happened.
 
+## Aggregate a Protocol Across Seeds
+
+Each experiment command writes one run folder. When the protocol runs one seed
+and one domain at a time, no folder holds a cross-seed number: every
+`summary.json` reports `seeds: 1` and a standard deviation of 0.0. This reads
+the folders and writes the means, spreads and paired gaps.
+
+```bash
+python -m src.evaluation.protocol --results results --output results/protocol/
+```
+
+It groups the runs by condition first. Two runs combine only when the manifest
+hash, algorithm, payload, preprocessing, detector commit, learning rate, epoch
+count and batch size all agree. A difference in any of them produces a separate
+group, so a change of learning rate is reported and never averaged away.
+
+Inside a group it merges **by seed**. Seed 1 of the protocol becomes one record
+holding every direction that seed produced, across folders. That is what keeps
+the paired gaps correct: a gap subtracts a cross-domain result from a
+same-domain result inside one seed, and both terms must come from the same
+trained model.
+
+The report holds three parts:
+
+- **training** — the escape epoch, the selected epoch against the budget, and
+  the final train-minus-validation difference, for each trained model. Read
+  this before the metrics. A detector that left the ln(2) plateau late trained
+  for fewer effective epochs than its budget states, and a selected epoch at
+  the end of the budget means the result is a lower bound.
+- **directions** — the mean and spread across seeds, for each direction.
+- **paired gaps** — each gap averaged over the seeds that produced both of its
+  terms.
+
+Two cases it reports rather than hides. A direction that not every seed
+produced is **left out**, because a mean over a different seed count than its
+neighbours misleads. The same seed and direction appearing in two folders is a
+**conflict**: the later folder wins, and the report names both.
+
 ## Diagnose a Detector Run
 
 When a detector run returns chance accuracy, these checks narrow the cause before
