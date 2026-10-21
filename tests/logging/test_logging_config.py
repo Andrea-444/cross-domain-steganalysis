@@ -166,3 +166,67 @@ class ProgressReporterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MainModuleLoggerTests(unittest.TestCase):
+    """A module started with `python -m` must still reach the project handler.
+
+    Its `__name__` is `"__main__"`, which sits outside the `src` namespace
+    where `configure_logging` attaches the handler. Warnings would still
+    appear, through the last-resort handler of the standard library, so the
+    loss of every INFO line is silent: the command prints its warnings and
+    none of its results.
+    """
+
+    def test_a_normal_name_is_unchanged(self) -> None:
+        self.assertEqual(get_logger("src.evaluation.protocol").name,
+                         "src.evaluation.protocol")
+
+    def test_main_resolves_to_the_real_module_name(self) -> None:
+        import sys
+        import types
+
+        main = types.SimpleNamespace(
+            __spec__=types.SimpleNamespace(name="src.evaluation.protocol")
+        )
+        with patch.dict(sys.modules, {"__main__": main}):
+            self.assertEqual(get_logger("__main__").name, "src.evaluation.protocol")
+
+    def test_a_script_without_a_spec_keeps_its_name(self) -> None:
+        import sys
+        import types
+
+        with patch.dict(sys.modules, {"__main__": types.SimpleNamespace(__spec__=None)}):
+            self.assertEqual(get_logger("__main__").name, "__main__")
+
+    def test_the_resolved_logger_emits_info(self) -> None:
+        import io
+        import sys
+        import types
+
+        stream = io.StringIO()
+        main = types.SimpleNamespace(
+            __spec__=types.SimpleNamespace(name="src.evaluation.protocol")
+        )
+        with patch.dict(sys.modules, {"__main__": main}):
+            configure_logging(log_level="INFO", stream=stream)
+            get_logger("__main__").info("a result line")
+        self.assertIn("a result line", stream.getvalue())
+
+    def test_every_entry_point_resolves(self) -> None:
+        """Each module run with -m must land inside the project namespace."""
+        import sys
+        import types
+
+        for module in (
+            "src.steganalysis.experiments",
+            "src.steganalysis.diagnostics",
+            "src.steganalysis.domain_probe",
+            "src.evaluation.protocol",
+            "src.pipeline.__main__",
+        ):
+            main = types.SimpleNamespace(__spec__=types.SimpleNamespace(name=module))
+            with patch.dict(sys.modules, {"__main__": main}):
+                self.assertTrue(
+                    get_logger("__main__").name.startswith("src."), module
+                )
