@@ -20,9 +20,28 @@ from sklearn.metrics import (
 # same-domain minus cross-domain, computed inside one seed and only then
 # averaged. Differencing the means instead would discard the pairing and
 # inflate the spread with seed-to-seed variation.
+# Each pair differences two directions inside one seed, so one trained model
+# supplies both terms. Two kinds answer two different questions.
+#
+# "transfer" holds a detector fixed and changes the test domain away from its
+# own. The first direction tests it at home and the second tests it abroad. It
+# measures how much the detector loses when the cover source changes.
+#
+# "test_domain" holds a detector fixed that trained on both domains, and
+# changes the test domain between them. Neither domain is abroad for it, and
+# neither has a training advantage, so the difference isolates the cover
+# domain itself. The transfer pairs cannot do this: `real_to_real` against
+# `ai_to_ai` changes the training domain and the test domain together.
 GAP_PAIRS = {
-    "real_to_real_minus_real_to_ai": ("real_to_real", "real_to_ai"),
-    "ai_to_ai_minus_ai_to_real": ("ai_to_ai", "ai_to_real"),
+    "real_to_real_minus_real_to_ai": {
+        "first": "real_to_real", "second": "real_to_ai", "kind": "transfer",
+    },
+    "ai_to_ai_minus_ai_to_real": {
+        "first": "ai_to_ai", "second": "ai_to_real", "kind": "transfer",
+    },
+    "mixed_to_real_minus_mixed_to_ai": {
+        "first": "mixed_to_real", "second": "mixed_to_ai", "kind": "test_domain",
+    },
 }
 
 
@@ -134,23 +153,28 @@ def calculate_metrics(
 
 
 def generalization_gaps(runs: list[dict[str, object]]) -> dict[str, object]:
-    """Difference each same-domain direction against its cross-domain partner.
+    """Difference the two directions of each pair in ``GAP_PAIRS``.
 
     The difference is taken inside one seed and only then averaged, so the
-    same trained model supplies both terms. The sign convention is
-    ``same_domain - cross_domain``. For a metric where a higher value is
-    better, a positive gap means the detector degraded across domains. For
-    an error metric such as ``detection_error`` or ``eer`` the sign reverses.
+    same trained model supplies both terms. The sign convention is always
+    ``first - second``.
+
+    For a metric where a higher value is better, a positive gap on a
+    ``transfer`` pair means the detector degraded when the cover source
+    changed. A positive gap on a ``test_domain`` pair means the second domain
+    is harder for a detector that has no advantage in either. For an error
+    metric such as ``detection_error`` or ``eer`` the sign reverses.
     """
     gaps: dict[str, object] = {}
-    for name, (same, cross) in GAP_PAIRS.items():
+    for name, pair in GAP_PAIRS.items():
+        first, second = pair["first"], pair["second"]
         paired: dict[str, list[float]] = {}
         for run in runs:
             directions = run.get("directions", {})
-            if same not in directions or cross not in directions:
+            if first not in directions or second not in directions:
                 continue
-            for metric, value in directions[same].items():
-                other = directions[cross].get(metric)
+            for metric, value in directions[first].items():
+                other = directions[second].get(metric)
                 if not isinstance(value, (int, float)) or isinstance(value, bool):
                     continue
                 if not isinstance(other, (int, float)) or isinstance(other, bool):
@@ -158,7 +182,11 @@ def generalization_gaps(runs: list[dict[str, object]]) -> dict[str, object]:
                 paired.setdefault(metric, []).append(float(value) - float(other))
         if not paired:
             continue
-        entry: dict[str, object] = {"same_domain": same, "cross_domain": cross}
+        entry: dict[str, object] = {
+            "first_direction": first,
+            "second_direction": second,
+            "kind": pair["kind"],
+        }
         for metric, values in paired.items():
             entry[f"{metric}_per_seed"] = values
             entry[f"{metric}_mean"] = float(np.mean(values))

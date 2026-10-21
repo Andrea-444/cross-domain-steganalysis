@@ -4,6 +4,7 @@ import math
 import unittest
 
 from src.evaluation.metrics import (
+    GAP_PAIRS,
     calculate_metrics,
     equal_error_rate,
     generalization_gaps,
@@ -189,3 +190,58 @@ def gaps_std(gaps):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MixedDomainGapTests(unittest.TestCase):
+    """One detector, two test domains: the cover domain without a training edge.
+
+    `real_to_real` against `ai_to_ai` changes the training domain and the test
+    domain at the same time. The mixed pair changes only the test domain.
+    """
+
+    @staticmethod
+    def directions(values: dict[str, float]) -> dict[str, object]:
+        return {
+            name: {"balanced_accuracy": v, "roc_auc": v, "detection_error": 1 - v}
+            for name, v in values.items()
+        }
+
+    def test_the_mixed_pair_is_computed(self) -> None:
+        runs = [{"seed": 1, "directions": self.directions(
+            {"mixed_to_real": 0.6427, "mixed_to_ai": 0.6304})}]
+        gaps = generalization_gaps(runs)
+        self.assertIn("mixed_to_real_minus_mixed_to_ai", gaps)
+        gap = gaps["mixed_to_real_minus_mixed_to_ai"]
+        self.assertAlmostEqual(gap["balanced_accuracy_mean"], 0.0123, places=4)
+        self.assertEqual(gap["kind"], "test_domain")
+        self.assertEqual(gap["first_direction"], "mixed_to_real")
+        self.assertEqual(gap["second_direction"], "mixed_to_ai")
+
+    def test_a_positive_gap_means_the_second_domain_is_harder(self) -> None:
+        harder_ai = [{"seed": 1, "directions": self.directions(
+            {"mixed_to_real": 0.70, "mixed_to_ai": 0.60})}]
+        harder_real = [{"seed": 1, "directions": self.directions(
+            {"mixed_to_real": 0.60, "mixed_to_ai": 0.70})}]
+        self.assertGreater(
+            generalization_gaps(harder_ai)["mixed_to_real_minus_mixed_to_ai"][
+                "balanced_accuracy_mean"], 0)
+        self.assertLess(
+            generalization_gaps(harder_real)["mixed_to_real_minus_mixed_to_ai"][
+                "balanced_accuracy_mean"], 0)
+
+    def test_an_error_metric_carries_the_opposite_sign(self) -> None:
+        runs = [{"seed": 1, "directions": self.directions(
+            {"mixed_to_real": 0.70, "mixed_to_ai": 0.60})}]
+        gap = generalization_gaps(runs)["mixed_to_real_minus_mixed_to_ai"]
+        self.assertGreater(gap["balanced_accuracy_mean"], 0)
+        self.assertLess(gap["detection_error_mean"], 0)
+
+    def test_every_pair_declares_its_kind(self) -> None:
+        for name, pair in GAP_PAIRS.items():
+            self.assertIn(pair["kind"], {"transfer", "test_domain"}, name)
+            self.assertEqual(name, f"{pair['first']}_minus_{pair['second']}")
+
+    def test_a_protocol_without_the_mixed_detector_omits_the_pair(self) -> None:
+        runs = [{"seed": 1, "directions": self.directions(
+            {"real_to_real": 0.76, "real_to_ai": 0.51})}]
+        self.assertNotIn("mixed_to_real_minus_mixed_to_ai", generalization_gaps(runs))

@@ -421,6 +421,44 @@ python -m src.steganography ledger \
 The ledger is derived from the `config.json` each run writes, so it cannot
 drift from what actually happened.
 
+## Aggregate a Protocol Across Seeds
+
+Each experiment command writes one run folder. When the protocol runs one seed
+and one domain at a time, no folder holds a cross-seed number: every
+`summary.json` reports `seeds: 1` and a standard deviation of 0.0. This reads
+the folders and writes the means, spreads and paired gaps.
+
+```bash
+python -m src.evaluation.protocol --results results --output results/protocol/
+```
+
+It groups the runs by condition first. Two runs combine only when the manifest
+hash, algorithm, payload, preprocessing, detector commit, learning rate, epoch
+count and batch size all agree. A difference in any of them produces a separate
+group, so a change of learning rate is reported and never averaged away.
+
+Inside a group it merges **by seed**. Seed 1 of the protocol becomes one record
+holding every direction that seed produced, across folders. That is what keeps
+the paired gaps correct: a gap subtracts a cross-domain result from a
+same-domain result inside one seed, and both terms must come from the same
+trained model.
+
+The report holds three parts:
+
+- **training** — the escape epoch, the selected epoch against the budget, and
+  the final train-minus-validation difference, for each trained model. Read
+  this before the metrics. A detector that left the ln(2) plateau late trained
+  for fewer effective epochs than its budget states, and a selected epoch at
+  the end of the budget means the result is a lower bound.
+- **directions** — the mean and spread across seeds, for each direction.
+- **paired gaps** — each gap averaged over the seeds that produced both of its
+  terms.
+
+Two cases it reports rather than hides. A direction that not every seed
+produced is **left out**, because a mean over a different seed count than its
+neighbours misleads. The same seed and direction appearing in two folders is a
+**conflict**: the later folder wins, and the report names both.
+
 ## Diagnose a Detector Run
 
 When a detector run returns chance accuracy, these checks narrow the cause before
@@ -813,26 +851,48 @@ score. `P_E` is `null` when either of its two rates is. The equal error rate is
 `summary.json` carries a `generalization_gaps` block:
 
 ```text
-real_to_real_minus_real_to_ai
-ai_to_ai_minus_ai_to_real
+real_to_real_minus_real_to_ai     kind: transfer
+ai_to_ai_minus_ai_to_real         kind: transfer
+mixed_to_real_minus_mixed_to_ai   kind: test_domain
 ```
 
-Each gap is `same_domain - cross_domain`, **computed inside one seed and only
-then averaged**, so the same trained model supplies both terms. Differencing
-the means instead would discard the pairing and let seed-to-seed variation
-inflate the spread. Each entry reports the per-seed values, their mean and
-their standard deviation.
+Each gap is `first - second`, **computed inside one seed and only then
+averaged**, so the same trained model supplies both terms. Differencing the
+means instead would discard the pairing and let seed-to-seed variation inflate
+the spread. Each entry reports the per-seed values, their mean, their standard
+deviation, the two direction names and its `kind`.
+
+The two kinds answer different questions, and the difference matters.
+
+**`transfer`** holds the detector fixed and moves the test domain away from
+its own. It measures what the detector loses when the cover source changes.
+
+**`test_domain`** holds fixed a detector that trained on both domains, and
+moves the test domain between them. Neither domain is foreign to it and
+neither carries a training advantage, so the difference isolates the cover
+domain itself.
+
+That isolation is why the mixed pair exists. Comparing `real_to_real` with
+`ai_to_ai` changes the training domain **and** the test domain at once, so a
+difference between them mixes the difficulty of the cover domain with how much
+each detector gained from its own training data. The mixed pair changes one
+thing.
 
 Read the sign with the metric in mind. For a metric where higher is better,
-such as balanced accuracy, a positive gap means the detector degraded across
-domains. For an error metric such as `detection_error` or `eer`, the sign
-reverses and a negative gap means degradation.
+such as balanced accuracy, a positive `transfer` gap means the detector
+degraded across domains, and a positive `test_domain` gap means the second
+domain is the harder one. For an error metric such as `detection_error` or
+`eer`, the sign reverses.
 
 For multiple seeds, `summary.json` reports metric mean and standard deviation.
 
 Primary interpretation:
 
-- Compare `AI -> AI` with `real -> real` to study intrinsic domain difficulty.
+- Compare `AI -> AI` with `real -> real` for domain difficulty, and read it
+  together with `mixed_to_real_minus_mixed_to_ai`. The first changes the
+  training domain and the test domain together; the second changes only the
+  test domain. If they disagree, the training domain is carrying part of the
+  difference.
 - Compare `real -> AI` with `real -> real` to measure transfer from conventional training.
 - Use `AI -> real` as the reverse-transfer control.
 

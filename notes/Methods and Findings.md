@@ -797,3 +797,75 @@ paired gaps that the results chapter reports.
 
 **A ceiling.** Every detector stopped while still improving. The absolute
 values are floors, and the size of each effect is measured between floors.
+
+## 9. A second reading of research question 1
+
+### 9.1 The problem with the first reading
+
+Section 8.4 compares `real_to_real` with `ai_to_ai` and reports that AI covers
+are 13.7 points of balanced accuracy harder. That comparison moves two things
+at once. The training domain changes and the test domain changes together, so
+the difference holds both the difficulty of the cover domain and whatever each
+detector gained from training on its own domain.
+
+The mixed detector gives a comparison that moves one thing. It trains on both
+domains, so neither test domain is foreign to it and neither carries a
+training advantage. The difference between `mixed_to_real` and `mixed_to_ai`
+is therefore the cover domain alone.
+
+### 9.2 The two readings disagree by a factor of ten
+
+| Comparison | What moves | Gap in balanced accuracy |
+|---|---|---|
+| `real_to_real` against `ai_to_ai` | training domain and test domain | **+0.1366** |
+| `mixed_to_real` against `mixed_to_ai` | test domain only | **+0.0123** |
+
+Both are seed 1 at 300 epochs. The sign agrees: AI covers are the harder side
+in both. The size does not.
+
+### 9.3 What else the mixed detector shows
+
+| | specialist | mixed | change |
+|---|---|---|---|
+| natural covers | 0.7608 | 0.6427 | **-0.1181** |
+| AI covers | 0.6242 | 0.6304 | **+0.0062** |
+
+The mixed detector holds 1,944 pairs from each domain, against 3,887 for each
+specialist. Halving the natural data costs 0.118 of balanced accuracy.
+Halving the AI data costs nothing.
+
+### 9.4 Two readings, and the project does not choose between them yet
+
+*Interpretation, and both of these fit the measurements.*
+
+**Reading A: the cover domains are close in difficulty, and the training data
+is what differs.** Detection of natural covers improves with more training
+data and had not saturated at 3,887 pairs. Detection of AI covers saturated
+below 1,944 pairs. The 0.1366 of section 8.4 would then be mostly a difference
+in how each domain rewards data, and the 0.0123 would be the difficulty of the
+cover domain.
+
+**Reading B: the mixed detector is limited by something common to both
+domains, and that limit hides a real difference.** It reaches 0.6427 and
+0.6304, and both sit far below the 0.7608 of the natural specialist. A
+detector held near one ceiling in both domains would report a small difference
+whatever the true one is.
+
+### 9.5 What separates them
+
+A measurement of how each domain responds to training-set size. Train a
+single-domain detector on 1,944 pairs, which is the count the mixed detector
+holds, and compare it with the 3,887-pair result in the same domain.
+
+- If natural covers lose approximately 0.118 and AI covers lose approximately
+  nothing, reading A holds, and the mixed detector is at its data limit rather
+  than a common ceiling.
+- If both domains lose a similar amount, the saturation claim of reading A
+  fails.
+
+Two trainings for each domain at one seed, so about 7.4 hours.
+
+> [!warning] Do not report 0.1366 as the answer to research question 1
+> Until the readings separate, state both numbers and what each one controls.
+> A reviewer who sees only the same-domain comparison will ask what the mixed
+> detector showed, because the protocol already contains it.
