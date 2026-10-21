@@ -125,7 +125,23 @@ def configure_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a named project logger."""
+    """Return a named project logger.
+
+    A module started with `python -m` has `__name__` set to `"__main__"`, and
+    that name sits outside the `src` namespace where `configure_logging`
+    attaches its handler. Such a logger reaches no project handler, so its
+    INFO lines disappear. Warnings still appear, through the last-resort
+    handler of the standard library, which makes the loss silent and easy to
+    miss: a command prints its warnings and none of its results.
+
+    Python records the real dotted name of a module started this way in
+    `__spec__`, so resolve `"__main__"` back to it.
+    """
+    if name == "__main__":
+        spec = getattr(sys.modules.get("__main__"), "__spec__", None)
+        resolved = getattr(spec, "name", None)
+        if resolved:
+            name = resolved
     return logging.getLogger(name)
 
 
