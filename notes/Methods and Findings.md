@@ -18,17 +18,18 @@ Per `agent-instructions/RESULTS_AND_WRITING.md`, **measured observations and
 interpretation are kept separate throughout**. Anything labelled
 *Interpretation* is an inference, not a result.
 
-> [!warning] Status on 2026-10-19
-> Sections 1 to 6 come from **methodological validation**, not from the
-> research experiment. Section 7 holds the first working detector, from a
-> single-seed pilot. **Section 8 holds the first evidence for both research
-> questions**, from all six directions at 300 epochs.
+> [!warning] Status on 2026-10-21
+> **Quote section 10.** It holds the complete protocol: six directions, three
+> seeds, nine runs, with means, spreads and paired gaps.
 >
-> Natural covers have two seeds that agree to 0.0005. AI and mixed have one
-> seed each, and their repeats started on 2026-10-19. Treat section 8 as
-> measured and not yet final: a direction with one seed carries no spread.
-> Every detector also stopped while still improving, so every value is a
-> lower bound.
+> Sections 1 to 6 are methodological validation. Section 7 is the first
+> working detector, from a single-seed pilot. Sections 8 and 9 report seed 1
+> alone, and section 10 supersedes their numbers. All three stay as the record
+> of what the project knew on each date.
+>
+> Two limits apply to every number in section 10. Each detector stopped while
+> still improving, so each value is a lower bound. The condition covers one
+> algorithm, one payload, one generator and one detector.
 
 ## 1. Cover-domain confound investigation
 
@@ -646,6 +647,10 @@ variance of the detector.
 
 ## 8. The six directions: first evidence for both research questions
 
+> [!note] Seed 1 only. Section 10 supersedes these numbers.
+> This section records what the project knew on 2026-10-19, when natural
+> covers had two seeds and the other domains had one.
+
 ### 8.1 What exists
 
 Four trained detectors, all at 300 epochs, learning rate 1e-4, batch size 32,
@@ -800,6 +805,10 @@ values are floors, and the size of each effect is measured between floors.
 
 ## 9. A second reading of research question 1
 
+> [!note] Seed 1 only. Section 10.5 supersedes these numbers.
+> The argument of this section holds at three seeds, and the measurement that
+> separates the two readings, in 9.5, has still not run.
+
 ### 9.1 The problem with the first reading
 
 Section 8.4 compares `real_to_real` with `ai_to_ai` and reports that AI covers
@@ -869,3 +878,124 @@ Two trainings for each domain at one seed, so about 7.4 hours.
 > Until the readings separate, state both numbers and what each one controls.
 > A reviewer who sees only the same-domain comparison will ask what the mixed
 > detector showed, because the protocol already contains it.
+
+## 10. The complete protocol: three seeds, six directions
+
+> [!note] This section supersedes the numbers in sections 8 and 9
+> Sections 8 and 9 report seed 1 alone. They stay as the record of what the
+> project knew on 2026-10-19. Every number for the thesis comes from here.
+
+### 10.1 The condition
+
+S-UNIWARD at 0.4 bpp, native centre crop, learning rate 1e-4, 300 epochs,
+batch size 32, manifest `f271f135`. Nine run folders: three training domains,
+three seeds each. Produced by `python -m src.evaluation.protocol`.
+
+Two repository commits produced the condition, `d5168c07` and `4bc1044f`. The
+only difference between them is where the tracking code stores its metrics.
+No training or evaluation code changed, and `summary.json` does not depend on
+it. The aggregator reports the two commits rather than hiding them.
+
+### 10.2 Validity
+
+| Folder | Domain | Seed | Escape | Selected | Train minus validation |
+|---|---|---|---|---|---|
+| `srnet_20261015_112246` | real | 1 | 19 | 287 / 300 | +0.0384 |
+| `srnet_20261017_121320` | real | 2 | 33 | 289 / 300 | +0.0362 |
+| `srnet_20261021_070017` | real | 3 | 15 | 293 / 300 | +0.0225 |
+| `srnet_20261015_182123` | ai | 1 | 7 | 244 / 300 | +0.0366 |
+| `srnet_20261019_180835` | ai | 2 | 9 | 268 / 300 | +0.0773 |
+| `srnet_20261020_233927` | ai | 3 | 6 | 273 / 300 | +0.0619 |
+| `srnet_20261016_173640` | mixed | 1 | 18 | 298 / 300 | +0.0382 |
+| `srnet_20261019_215609` | mixed | 2 | 11 | 291 / 300 | +0.0503 |
+| `srnet_20261021_031924` | mixed | 3 | 10 | 298 / 300 | +0.0638 |
+
+**No domain started late.** AI left the ln(2) plateau first in every seed, at
+epochs 6 to 9. Natural covers left last, at 15 to 33.
+
+**Every detector is still undertrained.** Each selected checkpoint sits
+between epoch 244 and 298 of 300, so **every value below is a lower bound**.
+
+**The AI and mixed detectors start to overfit where the natural one does
+not.** The natural detector reaches +0.0225 at seed 3. The AI detector reaches
++0.0773 at seed 2 and the mixed detector +0.0638 at seed 3. The differences
+are modest, and they point in a consistent direction.
+
+### 10.3 All six directions
+
+Mean and spread over three seeds.
+
+| Direction | Balanced acc | ROC-AUC | `P_E` | MCC | EER |
+|---|---|---|---|---|---|
+| `real_to_real` | 0.7680 +/- 0.0098 | 0.8824 +/- 0.0062 | 0.2320 +/- 0.0098 | 0.5374 +/- 0.0192 | 0.2300 +/- 0.0073 |
+| `mixed_to_real` | 0.6448 +/- 0.0040 | 0.7430 +/- 0.0118 | 0.3552 +/- 0.0040 | 0.3017 +/- 0.0145 | 0.3480 +/- 0.0085 |
+| `ai_to_ai` | 0.6343 +/- 0.0071 | 0.7208 +/- 0.0122 | 0.3657 +/- 0.0071 | 0.2709 +/- 0.0162 | 0.3662 +/- 0.0061 |
+| `mixed_to_ai` | 0.6302 +/- 0.0061 | 0.7145 +/- 0.0095 | 0.3698 +/- 0.0061 | 0.2652 +/- 0.0072 | 0.3665 +/- 0.0059 |
+| `ai_to_real` | 0.5142 +/- 0.0085 | 0.5380 +/- 0.0118 | 0.4858 +/- 0.0085 | 0.0323 +/- 0.0160 | 0.4808 +/- 0.0042 |
+| `real_to_ai` | 0.5067 +/- 0.0022 | 0.5297 +/- 0.0007 | 0.4933 +/- 0.0022 | 0.0332 +/- 0.0180 | 0.4781 +/- 0.0026 |
+
+> [!warning] The spread is a population standard deviation
+> `numpy` computes it with `ddof=0`. Over three seeds that is 1.22 times
+> smaller than the sample standard deviation. The `real_to_real` spread would
+> read 0.0120 rather than 0.0098. State which one the thesis reports.
+
+### 10.4 Paired gaps
+
+Each gap is differenced inside one seed and only then averaged.
+
+| Gap | Kind | Balanced acc | ROC-AUC |
+|---|---|---|---|
+| `real_to_real` minus `real_to_ai` | transfer | +0.2613 +/- 0.0086 | +0.3527 +/- 0.0057 |
+| `ai_to_ai` minus `ai_to_real` | transfer | +0.1201 +/- 0.0075 | +0.1827 +/- 0.0091 |
+| `mixed_to_real` minus `mixed_to_ai` | test domain | **+0.0145 +/- 0.0028** | +0.0286 +/- 0.0054 |
+
+### 10.5 Research question 1
+
+| Comparison | What moves | Gap |
+|---|---|---|
+| `real_to_real` against `ai_to_ai` | training domain and test domain | +0.1337 |
+| `mixed_to_real` minus `mixed_to_ai` | test domain only | +0.0145 +/- 0.0028 |
+
+*Measurement.* Both comparisons give the same sign. AI covers are the harder
+side. The sizes differ by a factor of ten.
+
+The mixed gap is positive in every seed, and its mean is about five spreads
+from zero, so the direction of the effect is not an artifact of one run.
+
+*Interpretation.* A detector with no training advantage in either domain finds
+S-UNIWARD at 0.4 bpp approximately 1.5 points of balanced accuracy harder in
+AI covers. The 13.4 points of the same-domain comparison hold that difficulty
+together with the different amount each domain gains from training on itself.
+Section 9.5 gives the measurement that separates the two, and it has not run.
+
+### 10.6 Research question 2
+
+| | balanced acc | ROC-AUC |
+|---|---|---|
+| `real_to_ai` | 0.5067 +/- 0.0022 | 0.5297 +/- 0.0007 |
+| `ai_to_real` | 0.5142 +/- 0.0085 | 0.5380 +/- 0.0118 |
+| `mixed_to_real` | 0.6448 +/- 0.0040 | 0.7430 +/- 0.0118 |
+| `mixed_to_ai` | 0.6302 +/- 0.0061 | 0.7145 +/- 0.0095 |
+
+*Measurement.* Both transfers sit near 0.53 area under the curve. They are
+above chance, and they carry no practical value: a detector at 0.53 separates
+almost nothing. The same two test sets give 0.74 and 0.71 to a detector that
+trained on both domains.
+
+*Interpretation.* The embedding traces are not incompatible between the
+domains. One detector that has seen both finds the embedding in both. The
+collapse of a single-domain detector on the other domain is distribution
+shift.
+
+### 10.7 What remains open
+
+**The two readings of research question 1.** Section 9.5 names the experiment,
+which is a single-domain detector trained on 1,944 pairs, and it costs about
+7.4 hours.
+
+**The ceiling.** Every detector stopped while still improving, so every value
+is a floor, and each effect is measured between floors.
+
+**One algorithm, one payload, one generator, one detector.** The accepted
+matrix adds S-UNIWARD at 0.2 bpp, MiPOD at 0.4 bpp, and WOW as a
+cross-algorithm test.
