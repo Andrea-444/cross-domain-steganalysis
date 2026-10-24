@@ -294,3 +294,12 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** One change in one place fixes every entry point, present and future. The alternative, which is to pass a literal name at each call site, repeats the knowledge eight times and a ninth entry point would reintroduce the fault.
 - **Consequences:** Output appears that nobody had seen before. The experiment runner prints its cross-domain summary table and its results-folder line at the end of a run, and neither had ever reached a terminal. No result changes, because `summary.json` never depended on the logger.
 - **Related:** `src/logging_config.py`, `tests/logging/test_logging_config.py`.
+
+### 2026-10-24 — Cap the training pairs, to separate data quantity from domain
+
+- **Status:** accepted
+- **Context:** Research question 1 has two estimates that disagree by a factor of ten. The same-domain comparison of `real_to_real` against `ai_to_ai` gives 0.1337 of balanced accuracy. The mixed gap, which moves only the test domain, gives 0.0145. The mixed detector holds 1,944 pairs of each domain, against the 3,887 of a specialist. The drop from 0.7680 to 0.6448 on natural covers therefore has two possible causes. Either the quantity of data explains it, or the mixed detector gives up something a specialist keeps.
+- **Decision:** Add `--train-pairs` to the experiment runner. It caps the training pairs for each detector and leaves the validation and test splits untouched.
+- **Reasoning:** A specialist trained at the mixed count separates the two causes. If a natural detector on 1,944 pairs reaches approximately 0.6448, the quantity of data explains the mixed detector. If it reaches much more, the mixed detector loses something else, and the gap of 0.0145 is a floor rather than the answer. The cap uses a seeded shuffle and not the head of the sorted list. The sort key is an identifier, so the head would be a biased subset. A smaller cap holds a subset of a larger one, so two budgets stay comparable.
+- **Consequences:** The validation split keeps every pair at any cap. A smaller validation set would change how a run chooses its checkpoint, and the comparison would then hold two differences instead of one. `config.json` records `train_pairs`, so the aggregator treats a capped run as its own condition and never averages it with a full one.
+- **Related:** [[Methods and Findings]] section 9.5.

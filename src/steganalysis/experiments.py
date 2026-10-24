@@ -270,6 +270,7 @@ def run_srnet_protocol(
     reference_root: str | Path,
     device: str | None,
     directions: list[str] | None = None,
+    train_pairs: int | None = None,
     wandb_mode: str = "disabled",
     wandb_project: str = "stego-cross-domain",
     wandb_entity: str | None = None,
@@ -301,6 +302,7 @@ def run_srnet_protocol(
         "embedding": embedding_condition(records),
         "directions": selected_directions,
         "train_domains": train_domains,
+        "train_pairs": train_pairs,
     }
     # The name, tags and group come from the run itself rather than from a
     # flag, so a run in W&B states the condition it actually used. The
@@ -364,6 +366,7 @@ def run_srnet_protocol(
                 learning_rate=learning_rate,
                 reference_root=reference_root,
                 device_name=device,
+                train_pairs=train_pairs,
                 epoch_callback=(
                     lambda record, current_seed=seed, current_domain=train_domain: (
                         tracker.log_epoch(current_seed, current_domain, record)
@@ -526,6 +529,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument(
+        "--train-pairs",
+        type=int,
+        default=None,
+        help=(
+            "Cap the training pairs for each detector. The default uses every "
+            "pair. Use it to measure how much of a result comes from the "
+            "quantity of data: the mixed detector holds half the pairs of a "
+            "specialist in each domain."
+        ),
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--srnet-root", default=str(DEFAULT_SRNET_ROOT))
     parser.add_argument("--output", default="results")
@@ -552,6 +566,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
+        train_pairs=args.train_pairs,
         output=args.output,
         reference_root=args.srnet_root,
         device=args.device,
