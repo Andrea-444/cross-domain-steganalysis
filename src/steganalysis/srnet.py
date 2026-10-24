@@ -63,6 +63,7 @@ def select_training_records(
     domain: str,
     split: str,
     seed: int,
+    limit: int | None = None,
 ) -> list[dict[str, object]]:
     """Return the covers one detector trains on, for one domain and split.
 
@@ -71,11 +72,20 @@ def select_training_records(
     union of both domains would see twice the data, and any advantage it showed
     could come from data volume rather than from domain coverage.
 
+    `limit` caps the number of pairs. It exists to answer one question: how
+    much of a domain's result comes from the quantity of training data. The
+    mixed detector holds half the pairs of a specialist in each domain, so a
+    specialist trained at the mixed count separates "this domain needs more
+    data" from "the mixed detector gives up something else".
+
     Selection is deterministic for a seed, so a repeated run trains on the same
-    covers.
+    covers. A smaller limit holds a subset of a larger one, because both draw
+    from the same seeded order.
     """
     if domain not in TRAINING_DOMAINS:
         raise ValueError(f"domain must be one of {TRAINING_DOMAINS}, got {domain!r}.")
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit must be at least 1, got {limit}.")
     by_domain: dict[str, list[dict[str, object]]] = {}
     for name in ("real", "ai"):
         rows = [
@@ -87,16 +97,37 @@ def select_training_records(
         by_domain[name] = rows
 
     if domain != "mixed":
-        return list(by_domain[domain])
+        chosen = list(by_domain[domain])
+        return _take(chosen, limit, f"limit-{domain}-{seed}-{split}")
 
     target = min(len(by_domain["real"]), len(by_domain["ai"]))
+    if limit is not None:
+        target = min(target, limit)
     half = target // 2
     generator = random.Random(f"mixed-{seed}-{split}")
-    chosen: list[dict[str, object]] = []
+    chosen = []
     for name in ("real", "ai"):
         chosen.extend(generator.sample(by_domain[name], min(half, len(by_domain[name]))))
     chosen.sort(key=lambda record: str(record["image_id"]))
     return chosen
+
+
+def _take(
+    rows: list[dict[str, object]], limit: int | None, salt: str
+) -> list[dict[str, object]]:
+    """Keep `limit` rows, chosen by a seeded shuffle rather than by position.
+
+    Taking the first rows of a sorted list would bias the subset, because the
+    order comes from the image identifier. A seeded shuffle keeps the choice
+    deterministic and representative.
+    """
+    if limit is None or limit >= len(rows):
+        return rows
+    order = list(rows)
+    random.Random(salt).shuffle(order)
+    kept = order[:limit]
+    kept.sort(key=lambda record: str(record["image_id"]))
+    return kept
 
 
 class ManifestPairDataset(Dataset):
@@ -256,6 +287,7 @@ def train_srnet(
     reference_root: str | Path = DEFAULT_SRNET_ROOT,
     device_name: str | None = None,
     epoch_callback: Callable[[dict[str, float]], None] | None = None,
+    train_pairs: int | None = None,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -265,7 +297,7 @@ def train_srnet(
     device = resolve_device(device_name)
     model = initialize_srnet(reference_root, device)
     train_data = ManifestPairDataset(
-        select_training_records(records, train_domain, "train", seed),
+        select_training_records(records, train_domain, "train", seed, train_pairs),
         train_domain, "train", augment=True, preselected=True, paired=True,
     )
     val_data = ManifestPairDataset(
