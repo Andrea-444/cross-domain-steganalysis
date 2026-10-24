@@ -271,6 +271,7 @@ def run_srnet_protocol(
     device: str | None,
     directions: list[str] | None = None,
     train_pairs: int | None = None,
+    mixed_pairs_per_domain: int | None = None,
     wandb_mode: str = "disabled",
     wandb_project: str = "stego-cross-domain",
     wandb_entity: str | None = None,
@@ -283,6 +284,14 @@ def run_srnet_protocol(
     validate_pair_splits(records)
     selected_directions = select_directions(directions)
     train_domains = required_train_domains(selected_directions)
+    if train_pairs is not None and mixed_pairs_per_domain is not None:
+        raise ValueError(
+            "--train-pairs and --mixed-pairs-per-domain cannot be used together."
+        )
+    if mixed_pairs_per_domain is not None and "mixed" not in train_domains:
+        raise ValueError(
+            "--mixed-pairs-per-domain requires a mixed_to_real or mixed_to_ai direction."
+        )
     run_dir = timestamped_results_dir(output, "srnet")
     runs: list[dict[str, object]] = []
     started = time.time()
@@ -303,6 +312,7 @@ def run_srnet_protocol(
         "directions": selected_directions,
         "train_domains": train_domains,
         "train_pairs": train_pairs,
+        "mixed_pairs_per_domain": mixed_pairs_per_domain,
     }
     # The name, tags and group come from the run itself rather than from a
     # flag, so a run in W&B states the condition it actually used. The
@@ -367,6 +377,7 @@ def run_srnet_protocol(
                 reference_root=reference_root,
                 device_name=device,
                 train_pairs=train_pairs,
+                mixed_pairs_per_domain=mixed_pairs_per_domain,
                 epoch_callback=(
                     lambda record, current_seed=seed, current_domain=train_domain: (
                         tracker.log_epoch(current_seed, current_domain, record)
@@ -529,7 +540,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
-    parser.add_argument(
+    training_size = parser.add_mutually_exclusive_group()
+    training_size.add_argument(
         "--train-pairs",
         type=int,
         default=None,
@@ -538,6 +550,16 @@ def parse_args() -> argparse.Namespace:
             "pair. Use it to measure how much of a result comes from the "
             "quantity of data: the mixed detector holds half the pairs of a "
             "specialist in each domain."
+        ),
+    )
+    training_size.add_argument(
+        "--mixed-pairs-per-domain",
+        type=int,
+        default=None,
+        help=(
+            "For mixed training only, use exactly this many pairs from each "
+            "domain. The mixed training total is twice this value. This is a "
+            "separate data-volume sensitivity condition."
         ),
     )
     parser.add_argument("--device", default=None)
@@ -567,6 +589,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         train_pairs=args.train_pairs,
+        mixed_pairs_per_domain=args.mixed_pairs_per_domain,
         output=args.output,
         reference_root=args.srnet_root,
         device=args.device,

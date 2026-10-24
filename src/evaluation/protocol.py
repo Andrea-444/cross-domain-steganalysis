@@ -51,6 +51,8 @@ CONDITION_FIELDS = (
     "learning_rate",
     "epochs",
     "batch_size",
+    "train_pairs",
+    "mixed_pairs_per_domain",
 )
 
 # The training loss of a detector that answers the same thing for every image.
@@ -116,6 +118,8 @@ def read_run(folder: str | Path) -> dict[str, object] | None:
             "learning_rate": config.get("learning_rate"),
             "epochs": config.get("epochs"),
             "batch_size": config.get("batch_size"),
+            "train_pairs": config.get("train_pairs"),
+            "mixed_pairs_per_domain": config.get("mixed_pairs_per_domain"),
         },
         "repository_commit": provenance.get("repository_commit"),
         "repository_dirty": provenance.get("repository_dirty"),

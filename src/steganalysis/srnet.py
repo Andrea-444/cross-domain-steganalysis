@@ -64,6 +64,7 @@ def select_training_records(
     split: str,
     seed: int,
     limit: int | None = None,
+    mixed_pairs_per_domain: int | None = None,
 ) -> list[dict[str, object]]:
     """Return the covers one detector trains on, for one domain and split.
 
@@ -78,6 +79,11 @@ def select_training_records(
     specialist trained at the mixed count separates "this domain needs more
     data" from "the mixed detector gives up something else".
 
+    ``mixed_pairs_per_domain`` is an explicit sensitivity condition. It gives a
+    mixed detector that many pairs from *each* cover domain, so the total is
+    twice the requested value. It is separate from ``limit`` because the two
+    options answer different questions and must not be confused.
+
     Selection is deterministic for a seed, so a repeated run trains on the same
     covers. A smaller limit holds a subset of a larger one, because both draw
     from the same seeded order.
@@ -86,6 +92,13 @@ def select_training_records(
         raise ValueError(f"domain must be one of {TRAINING_DOMAINS}, got {domain!r}.")
     if limit is not None and limit < 1:
         raise ValueError(f"limit must be at least 1, got {limit}.")
+    if mixed_pairs_per_domain is not None and mixed_pairs_per_domain < 1:
+        raise ValueError(
+            "mixed_pairs_per_domain must be at least 1, got "
+            f"{mixed_pairs_per_domain}."
+        )
+    if limit is not None and mixed_pairs_per_domain is not None:
+        raise ValueError("limit and mixed_pairs_per_domain cannot be used together.")
     by_domain: dict[str, list[dict[str, object]]] = {}
     for name in ("real", "ai"):
         rows = [
@@ -97,8 +110,30 @@ def select_training_records(
         by_domain[name] = rows
 
     if domain != "mixed":
+        if mixed_pairs_per_domain is not None:
+            raise ValueError("mixed_pairs_per_domain applies only to domain='mixed'.")
         chosen = list(by_domain[domain])
         return _take(chosen, limit, f"limit-{domain}-{seed}-{split}")
+
+    if mixed_pairs_per_domain is not None:
+        available = {name: len(rows) for name, rows in by_domain.items()}
+        short = {
+            name: count
+            for name, count in available.items()
+            if count < mixed_pairs_per_domain
+        }
+        if short:
+            detail = ", ".join(f"{name}={count}" for name, count in short.items())
+            raise ValueError(
+                f"Requested {mixed_pairs_per_domain} mixed training pairs per domain, "
+                f"but only {detail} are available for split={split!r}."
+            )
+        generator = random.Random(f"mixed-{seed}-{split}")
+        chosen = []
+        for name in ("real", "ai"):
+            chosen.extend(generator.sample(by_domain[name], mixed_pairs_per_domain))
+        chosen.sort(key=lambda record: str(record["image_id"]))
+        return chosen
 
     target = min(len(by_domain["real"]), len(by_domain["ai"]))
     if limit is not None:
@@ -288,6 +323,7 @@ def train_srnet(
     device_name: str | None = None,
     epoch_callback: Callable[[dict[str, float]], None] | None = None,
     train_pairs: int | None = None,
+    mixed_pairs_per_domain: int | None = None,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -297,7 +333,16 @@ def train_srnet(
     device = resolve_device(device_name)
     model = initialize_srnet(reference_root, device)
     train_data = ManifestPairDataset(
-        select_training_records(records, train_domain, "train", seed, train_pairs),
+        select_training_records(
+            records,
+            train_domain,
+            "train",
+            seed,
+            train_pairs,
+            mixed_pairs_per_domain=(
+                mixed_pairs_per_domain if train_domain == "mixed" else None
+            ),
+        ),
         train_domain, "train", augment=True, preselected=True, paired=True,
     )
     val_data = ManifestPairDataset(

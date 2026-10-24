@@ -33,11 +33,15 @@ def write_run(
     directions: dict[str, dict[str, object]], *,
     manifest: str = "abc123", learning_rate: float = 1e-4, epochs: int = 300,
     escape_at: int = 18, selected: int = 287,
+    train_pairs: int | None = None,
+    mixed_pairs_per_domain: int | None = None,
 ) -> Path:
     run = root / folder
     (run / "history").mkdir(parents=True)
     (run / "config.json").write_text(json.dumps({
         "learning_rate": learning_rate, "epochs": epochs, "batch_size": 32,
+        "train_pairs": train_pairs,
+        "mixed_pairs_per_domain": mixed_pairs_per_domain,
         "condition": {"algorithm": "suniward", "payload_bpp": 0.4,
                       "preprocess_mode": "crop"},
     }), encoding="utf-8")
@@ -173,6 +177,21 @@ class AggregateTests(unittest.TestCase):
         rates = sorted(r["condition"]["learning_rate"] for r in results)
         self.assertEqual(rates, [1e-4, 1e-3])
 
+    def test_a_different_mixed_training_size_is_a_separate_group(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            write_run(root, "srnet_a", 1, "mixed", {"mixed_to_real": metrics(0.7, 0.8)})
+            write_run(
+                root,
+                "srnet_b",
+                1,
+                "mixed",
+                {"mixed_to_real": metrics(0.75, 0.85)},
+                mixed_pairs_per_domain=3887,
+            )
+            results = aggregate(sorted(root.glob("srnet_*")))
+        self.assertEqual(len(results), 2)
+
     def test_training_facts_are_carried_through(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -199,7 +218,7 @@ class AggregateTests(unittest.TestCase):
             write_run(root, "srnet_a", 1, "real", {"real_to_real": metrics(0.7, 0.8)})
             run = read_run(root / "srnet_a")
         self.assertEqual(len(condition_key(run)), len(CONDITION_FIELDS))
-        self.assertNotIn(None, condition_key(run))
+        self.assertEqual(condition_key(run)[-2:], (None, None))
 
 
 if __name__ == "__main__":

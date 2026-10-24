@@ -577,6 +577,21 @@ accuracy are recorded per epoch but do not currently affect selection.
 
 SRNet is computationally heavier than the original prototype. Start with one seed and one epoch to verify a new environment, then use the full configuration for actual results.
 
+The primary mixed-domain control deliberately uses the same total number of
+training pairs as a specialist. To test whether more mixed-domain data helps,
+use an explicit, separately reported full-union condition:
+
+```bash
+python -m src.steganalysis.experiments --manifest <manifest> \
+  --directions mixed_to_real mixed_to_ai --seeds 1 --epochs 300 \
+  --batch-size 32 --learning-rate 1e-4 \
+  --mixed-pairs-per-domain 3887 --output results
+```
+
+This uses 3,887 natural and 3,887 AI pairs, or 7,774 total. The option cannot
+be combined with `--train-pairs`, and it fails if either domain is too small
+instead of silently changing the requested condition.
+
 ### Visualize an SRNet run with W&B
 
 W&B is optional. Install and authenticate it on the machine that performs the

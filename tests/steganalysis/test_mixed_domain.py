@@ -44,6 +44,39 @@ class SelectTrainingRecordsTests(unittest.TestCase):
         self.assertEqual(counts["real"], 40)
         self.assertEqual(counts["ai"], 40)
 
+    def test_explicit_mixed_pairs_per_domain_uses_the_full_union(self) -> None:
+        mixed = select_training_records(
+            records(100, 100),
+            "mixed",
+            "train",
+            seed=1,
+            mixed_pairs_per_domain=100,
+        )
+        counts = collections.Counter(r["domain"] for r in mixed)
+        self.assertEqual(len(mixed), 200)
+        self.assertEqual(counts, {"real": 100, "ai": 100})
+
+    def test_explicit_mixed_size_fails_instead_of_silently_shrinking(self) -> None:
+        with self.assertRaisesRegex(ValueError, "only real=80"):
+            select_training_records(
+                records(80, 100),
+                "mixed",
+                "train",
+                seed=1,
+                mixed_pairs_per_domain=100,
+            )
+
+    def test_mixed_size_options_are_mutually_exclusive(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot be used together"):
+            select_training_records(
+                records(100, 100),
+                "mixed",
+                "train",
+                seed=1,
+                limit=50,
+                mixed_pairs_per_domain=50,
+            )
+
     def test_mixed_is_deterministic_for_a_seed(self) -> None:
         rows = records(100, 100)
         first = [r["image_id"] for r in select_training_records(rows, "mixed", "train", seed=7)]

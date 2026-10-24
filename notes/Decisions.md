@@ -261,12 +261,21 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 
 ### 2026-10-19 — A larger budget belongs in a separate condition
 
-- **Status:** accepted
+- **Status:** accepted; the 600-epoch example was superseded by the 500-epoch sensitivity budget on 2026-10-24
 - **Context:** Every detector stopped while still improving, so every result is a lower bound. Doubling from 150 to 300 epochs on natural covers gained 0.038 balanced accuracy and 0.046 area under the curve from the same 3,887 pairs. The question of whether the conclusions survive more training is open.
 - **Decision:** Keep 300 epochs for every seed of the current condition. Test a larger budget as a separate, separately labelled condition, with one seed for each domain at the new budget.
 - **Reasoning:** Seeds inside one condition must share a budget. Two seeds at 300 and one at 600 cannot be averaged, and a condition where the seeds differ in budget is not a condition. The open question is whether the size of each effect survives more training, and one seed for each domain answers that. It is a sensitivity test and not a replacement for the primary result.
 - **Consequences:** The primary result stays at 300 epochs with its stated lower-bound limitation. A budget sensitivity condition costs about 22 hours for three domains at 600 epochs. Do not reach a larger budget by resuming from a saved checkpoint. The checkpoint holds the weights and not the optimizer state. A resumed run is therefore a fine-tune from weights, and not the same as a longer continuous run.
 - **Related:** [[Methods and Findings]] section 8.2.
+
+### 2026-10-24 — Test 500 epochs and a full-union mixed model as separate sensitivities
+
+- **Status:** accepted
+- **Context:** The 300-epoch checkpoints often occur near the end of training, and the equal-total mixed detector sees only about half of each domain's available training pairs. These leave two separate questions: whether more training time helps, and whether more mixed-domain data helps.
+- **Decision:** Run seed 1 of the current-size mixed detector from scratch for 500 epochs. Separately, add `--mixed-pairs-per-domain` and run seed 1 at the primary 300-epoch budget with 3,887 pairs from each domain, 7,774 total.
+- **Reasoning:** Changing one factor at a time keeps the results readable. The 500-epoch run changes only the training budget. The full-union run changes only the amount of mixed training data. Neither replaces the 300-epoch equal-total primary control.
+- **Consequences:** The earlier 600-epoch estimate is superseded by 500 epochs for this sensitivity check. The two new runs must remain separate conditions in aggregation. A larger mixed model that improves does not by itself prove that mixed-domain training is better; it also received twice as much data.
+- **Related:** `src/steganalysis/experiments.py`, `src/steganalysis/srnet.py`, `src/evaluation/protocol.py`.
 
 ### 2026-10-21 — Aggregate the protocol across run folders, and merge by seed
 
