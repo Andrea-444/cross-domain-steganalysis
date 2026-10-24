@@ -434,8 +434,9 @@ python -m src.evaluation.protocol --results results --output results/protocol/
 
 It groups the runs by condition first. Two runs combine only when the manifest
 hash, algorithm, payload, preprocessing, detector commit, learning rate, epoch
-count and batch size all agree. A difference in any of them produces a separate
-group, so a change of learning rate is reported and never averaged away.
+count, batch size, training-pair cap and mixed pairs per domain all agree. A
+difference in any of them produces a separate group, so a change of learning
+rate or training-set size is reported and never averaged away.
 
 Inside a group it merges **by seed**. Seed 1 of the protocol becomes one record
 holding every direction that seed produced, across folders. That is what keeps
