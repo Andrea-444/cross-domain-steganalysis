@@ -1057,9 +1057,9 @@ and steganographic condition fixed.
 | Mixed, 500 epochs, seed 1 | 0.5585 | 0.6247 | **-0.0786** | **-0.1013** |
 
 **Observation.** Natural-trained detectors remain near chance on both FLUX
-and SD3. FLUX-trained and mixed detectors retain above-chance ranking information on
-SD3, but both fall relative to the FLUX test. The 300-epoch mixed condition
-loses less and gives the highest mean SD3 result.
+and SD3. FLUX-trained and mixed detectors retain above-chance ranking
+information on SD3, but both fall relative to the FLUX test. The 300-epoch
+mixed condition loses less and gives the highest mean SD3 result.
 
 The errors change character by training condition. Natural-trained detectors
 label nearly every SD3 image as stego: mean specificity is 0.0857 and recall
@@ -1082,3 +1082,39 @@ has one seed.
 Detailed review: [[run-reviews/Run 12 - SD3 external checkpoint evaluation]].
 Result folder:
 `results/srnet_eval_genimagepp-sd3-suniward040_20261025_155824`.
+
+## 13. Same-generator prompt shift: realistic FLUX
+
+The same saved checkpoints were evaluated on 1,000 held-out GenImage++
+`flux_realistic` covers and their S-UNIWARD stego counterparts. This condition
+keeps the FLUX generator but replaces the base ImageNet-label prompts with
+detailed prompts. Embedding remains S-UNIWARD at 0.4 bpp, and preprocessing
+remains a native centre crop to 256x256 grayscale PNG.
+
+| Training condition | Base FLUX balanced acc. | Realistic FLUX balanced acc. | SD3 balanced acc. | Base FLUX ROC-AUC | Realistic FLUX ROC-AUC | SD3 ROC-AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| Natural, 300 epochs | 0.5067 | 0.5037 | 0.5073 | 0.5297 | 0.5531 | 0.5290 |
+| FLUX, 300 epochs | 0.6343 | **0.6997 +/- 0.0041** | 0.5590 | 0.7208 | **0.8111 +/- 0.0079** | 0.6289 |
+| Mixed, 300 epochs | 0.6302 | **0.7018 +/- 0.0050** | 0.5797 | 0.7145 | **0.8058 +/- 0.0070** | 0.6516 |
+| Mixed, 500 epochs, seed 1 | 0.6371 | **0.7075** | 0.5585 | 0.7260 | **0.8141** | 0.6247 |
+
+**Observation.** Realistic-prompt FLUX is easier for every checkpoint that
+trained on FLUX. Against base FLUX, balanced accuracy rises by 0.0654 for the
+FLUX specialist and 0.0716 for the mixed 300-epoch detector. ROC-AUC rises by
+0.0903 and 0.0913. Natural-trained detectors remain at chance and label almost
+every realistic FLUX image as stego.
+
+**Interpretation.** The tested realistic-prompt shift does not explain the
+loss on SD3. With the generator held at FLUX, this prompt shift improves rather
+than harms steganalysis. The SD3 decrease is therefore more consistent with
+generator-specific cover-distribution shift.
+
+This remains an inference from three datasets, not a causal isolation of one
+image property. A matching realistic-prompt SD3 evaluation would complete the
+2x2 comparison and test whether the FLUX-SD3 difference persists under both
+prompt conditions.
+
+Detailed review:
+[[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]]. Result
+folder:
+`results/srnet_eval_genimagepp-flux-realistic-suniward040_20261025_184816`.

@@ -25,3 +25,4 @@ for cross-seed conclusions.
 | 10 | mixed natural and AI-generated covers | 3 | 300 epochs | [[run-reviews/Run 10 - Mixed seed 3 300 epochs]] |
 | 11 | mixed natural and AI-generated covers | 1 | 500 epochs | [[run-reviews/Run 11 - Mixed seed 1 500 epochs]] |
 | 12 | external SD3 checkpoint evaluation | 1-3 | saved checkpoints | [[run-reviews/Run 12 - SD3 external checkpoint evaluation]] |
+| 13 | realistic-prompt FLUX checkpoint evaluation | 1-3 | saved checkpoints | [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]] |

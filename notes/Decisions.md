@@ -312,3 +312,12 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** A specialist trained at the mixed count separates the two causes. If a natural detector on 1,944 pairs reaches approximately 0.6448, the quantity of data explains the mixed detector. If it reaches much more, the mixed detector loses something else, and the gap of 0.0145 is a floor rather than the answer. The cap uses a seeded shuffle and not the head of the sorted list. The sort key is an identifier, so the head would be a biased subset. A smaller cap holds a subset of a larger one, so two budgets stay comparable.
 - **Consequences:** The validation split keeps every pair at any cap. A smaller validation set would change how a run chooses its checkpoint, and the comparison would then hold two differences instead of one. `config.json` records `train_pairs`, so the aggregator treats a capped run as its own condition and never averages it with a full one.
 - **Related:** [[Methods and Findings]] section 9.5.
+
+### 2026-10-25 — Test prompt shift before adding another generator
+
+- **Status:** accepted
+- **Context:** Saved checkpoints lost substantial accuracy when the held-out AI covers changed from base FLUX to base SD3. That difference could reflect the generator, or a broader sensitivity to unseen prompt and scene distributions.
+- **Decision:** Evaluate the saved checkpoints on the GenImage++ `flux_realistic` subset before adding a third generator. Keep S-UNIWARD at 0.4 bpp, crop-only preprocessing, the ImageNet class structure, the split seed and the checkpoint set fixed.
+- **Reasoning:** This changes the prompt distribution while holding the generator at FLUX. It is a cleaner test of prompt/content shift than immediately choosing a multistyle subset that changes generator and style together.
+- **Consequences:** Realistic FLUX improves rather than reduces detection for FLUX-trained checkpoints. The SD3 loss is therefore more consistent with generator-specific shift. A matching realistic SD3 evaluation is the next clean cell in the 2x2 comparison; no SD3 training is required.
+- **Related:** [[run-reviews/Run 12 - SD3 external checkpoint evaluation]], [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]].
