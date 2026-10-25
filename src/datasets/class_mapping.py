@@ -87,7 +87,7 @@ def build_genimagepp_class_maps(
         stem = path.stem
         source_label, separator, image_number = stem.rpartition("_")
         if not separator or not image_number.isdigit():
-            raise ValueError(f"Invalid GenImage++ FLUX filename: {member}")
+            raise ValueError(f"Invalid GenImage++ filename: {member}")
         if source_label not in simple_to_index:
             raise ValueError(f"Unknown GenImage++ class label: {source_label!r}")
         label_index = simple_to_index[source_label]

@@ -535,6 +535,27 @@ results/srnet_YYYYMMDD_HHMMSS/
   predictions/seed<N>_<direction>.jsonl   per-image label, prediction, probability
 ```
 
+### Evaluate saved checkpoints on a new cover set
+
+Evaluation on a new paired clean/stego manifest does not require retraining:
+
+```bash
+python -m src.steganalysis.evaluate \
+  --manifest <new-stego-manifest.jsonl> \
+  --checkpoints <run-a>/checkpoints/seed1_real.pt \
+                <run-b>/checkpoints/seed1_ai.pt \
+                <run-c>/checkpoints/seed1_mixed.pt \
+  --test-domain ai \
+  --test-set-name genimagepp-sd3 \
+  --batch-size 32 \
+  --output results
+```
+
+The command verifies the pinned SRNet version, loads every selected checkpoint,
+writes per-image predictions, and aggregates checkpoints only when their source
+training conditions match. Its timestamped output contains `config.json`, a
+copy of the evaluated manifest, `summary.json`, and `predictions/`.
+
 `summary.json` keeps each seed's metrics under `runs` alongside the aggregate
 `summary`, and records provenance: manifest SHA-256, dataset counts by domain and
 split, embedding condition read from the manifest, detector commit, repository
