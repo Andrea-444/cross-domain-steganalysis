@@ -35,37 +35,41 @@ class ClassMappingTests(unittest.TestCase):
 
 
 class PrepareSelectionTests(unittest.TestCase):
+    def extraction_fixture(self, root: Path) -> Path:
+        records = []
+        for domain, value, candidate_id in (
+            ("real", 20, "a" * 24),
+            ("ai", 40, "b" * 24),
+        ):
+            source = root / f"{domain}.jpg"
+            Image.new("RGB", (20, 18), (value, value, value)).save(source)
+            checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+            records.append(
+                {
+                    "candidate_id": candidate_id,
+                    "dataset_id": f"{domain}-fixture",
+                    "dataset_version": "v1",
+                    "domain": domain,
+                    "source_kind": "directory",
+                    "source_path": str(root),
+                    "source_member": source.name,
+                    "class_id": "n00000001",
+                    "extension": ".jpg",
+                    "selection_seed": 42,
+                    "split": "test",
+                    "cohort": "full_addition",
+                    "local_path": str(source),
+                    "sha256": checksum,
+                }
+            )
+        extraction = root / "extraction.jsonl"
+        write_manifest(extraction, records)
+        return extraction
+
     def test_preserves_domain_class_and_split(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            records = []
-            for domain, value, candidate_id in (
-                ("real", 20, "a" * 24),
-                ("ai", 40, "b" * 24),
-            ):
-                source = root / f"{domain}.jpg"
-                Image.new("RGB", (20, 18), (value, value, value)).save(source)
-                checksum = hashlib.sha256(source.read_bytes()).hexdigest()
-                records.append(
-                    {
-                        "candidate_id": candidate_id,
-                        "dataset_id": f"{domain}-fixture",
-                        "dataset_version": "v1",
-                        "domain": domain,
-                        "source_kind": "directory",
-                        "source_path": str(root),
-                        "source_member": source.name,
-                        "class_id": "n00000001",
-                        "extension": ".jpg",
-                        "selection_seed": 42,
-                        "split": "test",
-                        "cohort": "full_addition",
-                        "local_path": str(source),
-                        "sha256": checksum,
-                    }
-                )
-            extraction = root / "extraction.jsonl"
-            write_manifest(extraction, records)
+            extraction = self.extraction_fixture(root)
             manifest = prepare_extracted_selection(
                 extraction, "fixture", root / "processed", size=16
             )
@@ -77,6 +81,25 @@ class PrepareSelectionTests(unittest.TestCase):
                 with Image.open(record["clean_path"]) as image:
                     self.assertEqual(image.mode, "L")
                     self.assertEqual(image.size, (16, 16))
+
+    def test_can_prepare_only_the_external_evaluation_domain(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            extraction = self.extraction_fixture(root)
+            manifest = prepare_extracted_selection(
+                extraction,
+                "ai-only",
+                root / "processed",
+                size=16,
+                domains=("ai",),
+            )
+            clean_records = read_manifest(manifest)
+            self.assertEqual(len(clean_records), 1)
+            self.assertEqual(clean_records[0]["domain"], "ai")
+            config = json.loads(
+                manifest.with_suffix(".config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(config["domains"], ["ai"])
 
 
 if __name__ == "__main__":

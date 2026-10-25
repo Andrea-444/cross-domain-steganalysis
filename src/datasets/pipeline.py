@@ -410,6 +410,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="With --preprocess crop, skip images smaller than the crop size.",
     )
+    prepare_selection.add_argument(
+        "--domains",
+        nargs="+",
+        choices=["real", "ai"],
+        default=None,
+        help="Prepare only the named domains after validating the complete selection.",
+    )
     return parser.parse_args()
 
 
@@ -455,6 +462,7 @@ def main() -> None:
             size=args.size,
             mode=args.preprocess,
             skip_undersized=args.skip_undersized,
+            domains=tuple(args.domains) if args.domains else None,
         )
         LOGGER.info(f"Manifest: {path.resolve()}")
         return

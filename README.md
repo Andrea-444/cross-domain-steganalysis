@@ -357,6 +357,10 @@ python -m src.datasets prepare-selection \
   --size 256
 ```
 
+For an external evaluation that uses only one cover domain, pass for example
+`--domains ai`. The complete selection is still validated before filtering,
+and the output configuration records the retained domain.
+
 `audit` contains 100 images per domain. `pilot` reuses those files and adds 400 per domain. `full` reuses both earlier stages and adds the remaining selected images. Content checksums prevent silent replacement or duplicate extraction. Final test members are assigned from the beginning and never enter audit or pilot cohorts.
 
 For active experiments, keep the selected native corpus on a local or external NVMe filesystem. Compressed archives are suitable for cold storage; network/object storage is better used as a source or backup than as the direct image-training path.

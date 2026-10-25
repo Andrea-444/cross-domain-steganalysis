@@ -54,6 +54,7 @@ def prepare_extracted_selection(
     size: int = 256,
     mode: str = "fit",
     skip_undersized: bool = False,
+    domains: tuple[str, ...] | None = None,
 ) -> Path:
     if not name.strip():
         raise ValueError("Dataset name must not be empty.")
@@ -62,6 +63,15 @@ def prepare_extracted_selection(
     extraction_manifest = Path(extraction_manifest).resolve()
     extraction_records = read_manifest(extraction_manifest)
     validate_selection_manifest(extraction_records)
+    if domains is not None:
+        invalid_domains = set(domains) - {"real", "ai"}
+        if invalid_domains:
+            raise ValueError(f"Unknown domains: {sorted(invalid_domains)}")
+        extraction_records = [
+            record for record in extraction_records if record["domain"] in domains
+        ]
+        if not extraction_records:
+            raise ValueError("The selected domains contain no extracted covers.")
     output = Path(output)
     dataset_root = output / name
     manifest_path = output / "manifests" / f"{name}_clean.jsonl"
@@ -143,6 +153,7 @@ def prepare_extracted_selection(
                 "preprocess_mode": mode,
                 "color_mode": "L",
                 "image_format": "PNG",
+                "domains": sorted({str(record["domain"]) for record in clean_records}),
                 "record_count": len(clean_records),
                 "skipped_undersized": skipped,
                 "clean_manifest_sha256": file_sha256(manifest_path),
