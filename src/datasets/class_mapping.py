@@ -88,12 +88,43 @@ def build_genimagepp_class_maps(
             }
         )
 
+    ai_image_members = [
+        member
+        for member, _ in ai_members
+        if PurePosixPath(member).suffix.lower() in IMAGE_EXTENSIONS
+        and "1_fake" in PurePosixPath(member).parts
+    ]
+    numeric_stems = [
+        PurePosixPath(member).stem
+        for member in ai_image_members
+        if PurePosixPath(member).stem.isdigit()
+    ]
+    numeric_filename_base: int | None = None
+    if numeric_stems:
+        if len(numeric_stems) != len(ai_image_members):
+            raise ValueError(
+                "GenImage++ archive mixes numeric prompt-index filenames with "
+                "class-label filenames."
+            )
+        if prompts is None:
+            raise ValueError(
+                "Numeric GenImage++ filenames require --indexed-prompts with the "
+                "official prompt list."
+            )
+        expected_prompt_count = len(simple) * 6
+        if len(prompts) != expected_prompt_count:
+            raise ValueError(
+                f"Expected {expected_prompt_count} indexed prompts; "
+                f"found {len(prompts)}."
+            )
+        numeric_filename_base = _numeric_filename_base(
+            numeric_stems, prompt_count=len(prompts)
+        )
+
     ai_records: list[dict[str, object]] = []
     numeric_prompt_indices: list[int] = []
-    for member, _ in ai_members:
+    for member in ai_image_members:
         path = PurePosixPath(member)
-        if path.suffix.lower() not in IMAGE_EXTENSIONS or "1_fake" not in path.parts:
-            continue
         stem = path.stem
         record: dict[str, object]
         if stem.isdigit():
@@ -101,6 +132,7 @@ def build_genimagepp_class_maps(
                 stem,
                 prompts=prompts,
                 class_count=len(simple),
+                filename_base=numeric_filename_base or 0,
             )
             numeric_prompt_indices.append(prompt_index)
             record = {
@@ -126,11 +158,6 @@ def build_genimagepp_class_maps(
         ai_records.append(record)
 
     if numeric_prompt_indices:
-        if len(numeric_prompt_indices) != len(ai_records):
-            raise ValueError(
-                "GenImage++ archive mixes numeric prompt-index filenames with "
-                "class-label filenames."
-            )
         expected_indices = list(range(len(prompts or [])))
         if sorted(numeric_prompt_indices) != expected_indices:
             raise ValueError(
@@ -168,6 +195,7 @@ def build_genimagepp_class_maps(
                 "indexed_prompts_sha256": (
                     _sha256(indexed_prompts_path) if indexed_prompts_path else None
                 ),
+                "numeric_filename_base": numeric_filename_base,
                 "records_per_domain": 6000,
                 "class_count": 1000,
                 "records_per_class": 6,
@@ -185,6 +213,7 @@ def _numeric_prompt_mapping(
     prompts: list[str] | None,
     class_count: int,
     records_per_class: int = 6,
+    filename_base: int = 0,
 ) -> tuple[int, int]:
     if prompts is None:
         raise ValueError(
@@ -196,10 +225,24 @@ def _numeric_prompt_mapping(
         raise ValueError(
             f"Expected {expected_prompt_count} indexed prompts; found {len(prompts)}."
         )
-    prompt_index = int(stem)
+    if filename_base not in {0, 1}:
+        raise ValueError("Numeric filename base must be zero or one.")
+    prompt_index = int(stem) - filename_base
     if not 0 <= prompt_index < len(prompts):
         raise ValueError(f"Prompt index is outside the official list: {prompt_index}")
     return prompt_index, prompt_index // records_per_class
+
+
+def _numeric_filename_base(stems: list[str], prompt_count: int) -> int:
+    values = sorted(int(stem) for stem in stems)
+    if values == list(range(prompt_count)):
+        return 0
+    if values == list(range(1, prompt_count + 1)):
+        return 1
+    raise ValueError(
+        "Numeric GenImage++ filenames must contain either 0 through N-1 or "
+        "1 through N exactly once."
+    )
 
 
 def _load_hf_labels(path: Path) -> list[str]:

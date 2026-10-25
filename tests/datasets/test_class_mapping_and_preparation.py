@@ -10,6 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 from src.datasets.class_mapping import (
+    _numeric_filename_base,
     _numeric_prompt_mapping,
     build_genimagepp_class_maps,
 )
@@ -24,6 +25,31 @@ class ClassMappingTests(unittest.TestCase):
         self.assertEqual(_numeric_prompt_mapping("5", prompts, 2), (5, 0))
         self.assertEqual(_numeric_prompt_mapping("6", prompts, 2), (6, 1))
         self.assertEqual(_numeric_prompt_mapping("11", prompts, 2), (11, 1))
+
+    def test_one_based_filenames_map_to_zero_based_prompts(self) -> None:
+        prompts = [f"prompt {index}" for index in range(12)]
+        self.assertEqual(
+            _numeric_prompt_mapping("1", prompts, 2, filename_base=1), (0, 0)
+        )
+        self.assertEqual(
+            _numeric_prompt_mapping("6", prompts, 2, filename_base=1), (5, 0)
+        )
+        self.assertEqual(
+            _numeric_prompt_mapping("7", prompts, 2, filename_base=1), (6, 1)
+        )
+        self.assertEqual(
+            _numeric_prompt_mapping("12", prompts, 2, filename_base=1), (11, 1)
+        )
+
+    def test_numeric_filename_base_is_detected_from_the_complete_set(self) -> None:
+        self.assertEqual(_numeric_filename_base([str(i) for i in range(12)], 12), 0)
+        self.assertEqual(
+            _numeric_filename_base([str(i) for i in range(1, 13)], 12), 1
+        )
+
+    def test_numeric_filename_set_must_be_complete(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exactly once"):
+            _numeric_filename_base(["1", "2", "4"], 3)
 
     def test_numeric_filenames_require_the_official_prompt_list(self) -> None:
         with self.assertRaisesRegex(ValueError, "--indexed-prompts"):
