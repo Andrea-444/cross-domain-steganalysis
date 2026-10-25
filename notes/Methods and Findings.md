@@ -781,10 +781,10 @@ detector reads the residual of a natural cover as evidence of a clean image.
 `mixed_to_real` at 0.6427 is well below `real_to_real` at 0.7608. Part of that
 distance is built into the design and is not a result.
 
-The mixed training set holds the **same total** as a single-domain set, which
-is 3,887 pairs. Half come from each domain, so it holds about 1,944 natural
-pairs against the 3,887 of the specialist. The mixed detector trains on half
-the natural data.
+The mixed training set holds 3,886 pairs, one fewer than the 3,887-pair
+single-domain set because the domain-balanced selection takes the integer half.
+It holds exactly 1,943 pairs from each domain, against the 3,887 of a
+specialist. The mixed detector therefore trains on half the natural data.
 
 The same design makes the AI side more interesting. `mixed_to_ai` at 0.6304
 matches `ai_to_ai` at 0.6242 while using half the AI data. Detection in the AI
@@ -839,7 +839,7 @@ in both. The size does not.
 | natural covers | 0.7608 | 0.6427 | **-0.1181** |
 | AI covers | 0.6242 | 0.6304 | **+0.0062** |
 
-The mixed detector holds 1,944 pairs from each domain, against 3,887 for each
+The mixed detector holds 1,943 pairs from each domain, against 3,887 for each
 specialist. Halving the natural data costs 0.118 of balanced accuracy.
 Halving the AI data costs nothing.
 
@@ -863,7 +863,7 @@ whatever the true one is.
 ### 9.5 What separates them
 
 A measurement of how each domain responds to training-set size. Train a
-single-domain detector on 1,944 pairs, which is the count the mixed detector
+single-domain detector on 1,943 pairs, which is the count the mixed detector
 holds, and compare it with the 3,887-pair result in the same domain.
 
 - If natural covers lose approximately 0.118 and AI covers lose approximately
@@ -993,9 +993,92 @@ shift.
 which is a single-domain detector trained on 1,944 pairs, and it costs about
 7.4 hours.
 
-**The ceiling.** Every detector stopped while still improving, so every value
-is a floor, and each effect is measured between floors.
+**The ceiling.** The 300-epoch values remain the primary three-seed condition,
+but the mixed seed-1 budget sensitivity has now run to 500 epochs. Section 11
+records that result.
 
-**One algorithm, one payload, one generator, one detector.** The accepted
-matrix adds S-UNIWARD at 0.2 bpp, MiPOD at 0.4 bpp, and WOW as a
-cross-algorithm test.
+**One algorithm, one payload, one primary generator, one detector.** The
+external SD3 evaluation in section 12 adds a second AI generator, but no model
+has trained on it. The accepted matrix still adds S-UNIWARD at 0.2 bpp, MiPOD
+at 0.4 bpp, and WOW as a cross-algorithm test.
+
+## 11. Mixed-domain training-budget sensitivity: 500 epochs
+
+One mixed-domain detector was trained from scratch with seed 1 for 500 epochs.
+Everything except the epoch budget matches the 300-epoch mixed seed-1
+condition: manifest `f271f135`, S-UNIWARD at 0.4 bpp, native centre crop,
+3,886 mixed training pairs, batch size 32 and learning rate 1e-4.
+
+The selected checkpoint moved from epoch 298 of 300 to epoch 472 of 500. The
+500-epoch run left the chance plateau at epoch 12, reached a minimum validation
+loss of 0.5646, and finished with train accuracy 0.716 against validation
+balanced accuracy 0.669.
+
+| Direction | 300-epoch seed 1 | 500-epoch seed 1 | Change |
+|---|---:|---:|---:|
+| `mixed_to_real` balanced accuracy | 0.6427 | 0.7192 | **+0.0765** |
+| `mixed_to_real` ROC-AUC | 0.7553 | 0.8220 | **+0.0667** |
+| `mixed_to_ai` balanced accuracy | 0.6304 | 0.6371 | +0.0067 |
+| `mixed_to_ai` ROC-AUC | 0.7192 | 0.7260 | +0.0068 |
+| natural minus AI balanced-accuracy gap | +0.0123 | +0.0821 | +0.0698 |
+
+**Observation.** The extra 200 epochs help the natural-cover side much more
+than the AI-generated-cover side. The mixed detector gains 7.65 percentage
+points on natural covers and 0.67 points on AI-generated covers.
+
+**Interpretation.** The small mixed-domain gap at 300 epochs was partly a
+training-budget effect. At a longer budget, the same model finds the embedding
+more easily in natural covers. This supports the direction of research question
+1, but the 8.21-point gap is a one-seed sensitivity result and not a replacement
+for the three-seed primary estimate.
+
+The minimum validation loss occurs at epoch 472 and the final loss at epoch 500
+is only 0.0010 higher. For this seed, 500 epochs is close to a useful stopping
+point. The next controlled step is the full-union mixed model at 300 epochs,
+which changes data volume rather than training duration.
+
+Detailed review: [[run-reviews/Run 11 - Mixed seed 1 500 epochs]]. W&B run:
+`j4o9fc8u`. Result folder: `results/srnet_20261024_155602`.
+
+## 12. External-generator evaluation: Stable Diffusion 3
+
+The saved checkpoints were evaluated without retraining on 1,000 held-out
+GenImage++ Stable Diffusion 3 covers and their S-UNIWARD stego counterparts.
+The embedding remains 0.4 bpp, and preprocessing remains a native centre crop
+to 256x256 grayscale PNG. The external test therefore changes the AI-image
+generator and the individual images while holding the detector checkpoints
+and steganographic condition fixed.
+
+| Training condition | SD3 balanced acc. | SD3 ROC-AUC | Change from FLUX balanced acc. | Change from FLUX ROC-AUC |
+|---|---:|---:|---:|---:|
+| Natural, 300 epochs | 0.5073 +/- 0.0017 | 0.5290 +/- 0.0076 | +0.0006 | -0.0007 |
+| FLUX, 300 epochs | 0.5590 +/- 0.0109 | 0.6289 +/- 0.0163 | **-0.0753** | **-0.0919** |
+| Mixed, 300 epochs | **0.5797 +/- 0.0088** | **0.6516 +/- 0.0143** | **-0.0505** | **-0.0629** |
+| Mixed, 500 epochs, seed 1 | 0.5585 | 0.6247 | **-0.0786** | **-0.1013** |
+
+**Observation.** Natural-trained detectors remain near chance on both FLUX
+and SD3. FLUX-trained and mixed detectors retain above-chance ranking information on
+SD3, but both fall relative to the FLUX test. The 300-epoch mixed condition
+loses less and gives the highest mean SD3 result.
+
+The errors change character by training condition. Natural-trained detectors
+label nearly every SD3 image as stego: mean specificity is 0.0857 and recall
+is 0.9290. FLUX-trained detectors instead miss most stego images: specificity
+is 0.8397 and recall is 0.2783. Mixed training improves the balance to 0.7290
+specificity and 0.4303 recall.
+
+**Interpretation.** The original AI-cover result is partly
+generator-specific. Training on both cover domains gives better external
+transfer than either specialist under the tested 300-epoch condition. This
+does not establish that embedding is intrinsically harder in SD3, because no
+detector trained on SD3. Ordinary cover-distribution shift remains the direct
+explanation.
+
+For seed 1, extending mixed training from 300 to 500 epochs improved FLUX
+slightly but reduced SD3 balanced accuracy from 0.5905 to 0.5585. Increased
+specialization is a hypothesis, not a finding, because the longer condition
+has one seed.
+
+Detailed review: [[run-reviews/Run 12 - SD3 external checkpoint evaluation]].
+Result folder:
+`results/srnet_eval_genimagepp-sd3-suniward040_20261025_155824`.
