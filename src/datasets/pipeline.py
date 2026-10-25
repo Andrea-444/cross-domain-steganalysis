@@ -389,6 +389,14 @@ def parse_args() -> argparse.Namespace:
     mapping.add_argument("--imagenet-labels", required=True)
     mapping.add_argument("--simple-labels", required=True)
     mapping.add_argument("--class-index", required=True)
+    mapping.add_argument(
+        "--indexed-prompts",
+        default=None,
+        help=(
+            "Official ordered prompt JSON for subsets whose image filenames are "
+            "numeric prompt indices."
+        ),
+    )
     mapping.add_argument("--output", required=True)
 
     prepare_selection = subparsers.add_parser(
@@ -447,6 +455,7 @@ def main() -> None:
             simple_labels=args.simple_labels,
             class_index=args.class_index,
             output=args.output,
+            indexed_prompts=args.indexed_prompts,
         )
         LOGGER.info(f"Real class map: {real_map.resolve()}")
         LOGGER.info(f"AI class map: {ai_map.resolve()}")

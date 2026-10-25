@@ -9,12 +9,35 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.datasets.class_mapping import build_genimagepp_class_maps
+from src.datasets.class_mapping import (
+    _numeric_prompt_mapping,
+    build_genimagepp_class_maps,
+)
 from src.datasets.manifest import read_manifest, write_manifest
 from src.datasets.preparation import prepare_extracted_selection
 
 
 class ClassMappingTests(unittest.TestCase):
+    def test_numeric_prompt_indices_map_six_images_per_class(self) -> None:
+        prompts = [f"prompt {index}" for index in range(12)]
+        self.assertEqual(_numeric_prompt_mapping("0", prompts, 2), (0, 0))
+        self.assertEqual(_numeric_prompt_mapping("5", prompts, 2), (5, 0))
+        self.assertEqual(_numeric_prompt_mapping("6", prompts, 2), (6, 1))
+        self.assertEqual(_numeric_prompt_mapping("11", prompts, 2), (11, 1))
+
+    def test_numeric_filenames_require_the_official_prompt_list(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--indexed-prompts"):
+            _numeric_prompt_mapping("0", None, 2)
+
+    def test_numeric_prompt_list_must_have_six_entries_per_class(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Expected 12 indexed prompts"):
+            _numeric_prompt_mapping("0", ["too short"], 2)
+
+    def test_numeric_prompt_index_must_be_in_range(self) -> None:
+        prompts = [f"prompt {index}" for index in range(12)]
+        with self.assertRaisesRegex(ValueError, "outside"):
+            _numeric_prompt_mapping("12", prompts, 2)
+
     def test_rejects_non_thousand_class_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

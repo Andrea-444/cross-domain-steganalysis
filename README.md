@@ -293,6 +293,21 @@ python -m src.datasets map-genimagepp \
   --output data/metadata/imagenet-genimagepp
 ```
 
+GenImage++ realistic subsets use numeric filenames that refer to the official
+ordered prompt list. Supply that list explicitly so six consecutive prompt
+indices map to each ordered ImageNet class:
+
+```bash
+python -m src.datasets map-genimagepp \
+  --real-src data/raw/imagenet-val \
+  --ai-src data/raw/genimagepp/flux_realistic.tar.zst \
+  --imagenet-labels data/raw/imagenet-hf-labels.json \
+  --simple-labels data/raw/imagenet-simple-labels.json \
+  --class-index data/raw/imagenet_class_index.json \
+  --indexed-prompts data/raw/genimagepp/imagenet_detail_prompt.json \
+  --output data/metadata/imagenet-genimagepp-flux-realistic
+```
+
 The mapping joins the ordered metadata by class index and requires exact label
 equality; it does not use fuzzy class-name matching. Pass the generated JSONL
 maps to `index` with `--no-parent-class`.
