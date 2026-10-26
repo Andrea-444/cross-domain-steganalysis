@@ -275,6 +275,7 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Decision:** Run seed 1 of the current-size mixed detector from scratch for 500 epochs. Separately, add `--mixed-pairs-per-domain` and run seed 1 at the primary 300-epoch budget with 3,887 pairs from each domain, 7,774 total.
 - **Reasoning:** Changing one factor at a time keeps the results readable. The 500-epoch run changes only the training budget. The full-union run changes only the amount of mixed training data. Neither replaces the 300-epoch equal-total primary control.
 - **Consequences:** The earlier 600-epoch estimate is superseded by 500 epochs for this sensitivity check. The two new runs must remain separate conditions in aggregation. A larger mixed model that improves does not by itself prove that mixed-domain training is better; it also received twice as much data.
+- **Outcome (2026-10-26):** The full-union run improved both test domains, but the epoch-based schedule means it also performed about twice as many optimizer updates as the equal-total 300-epoch control. Interpret it as a practical larger-training-recipe sensitivity, not as a pure isolation of data volume. A step-matched control would be needed for that causal claim. See [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]].
 - **Related:** `src/steganalysis/experiments.py`, `src/steganalysis/srnet.py`, `src/evaluation/protocol.py`.
 
 ### 2026-10-21 — Aggregate the protocol across run folders, and merge by seed

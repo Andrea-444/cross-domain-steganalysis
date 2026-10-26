@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-14
+updated: 2026-10-26
 audience: thesis-writing
 ---
 
@@ -1118,3 +1118,44 @@ Detailed review:
 [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]]. Result
 folder:
 `results/srnet_eval_genimagepp-flux-realistic-suniward040_20261025_184816`.
+
+## 14. Full-union mixed-domain sensitivity
+
+One mixed-domain detector was trained with seed 1 for 300 epochs on every
+available training pair: 3,887 natural and 3,887 AI-generated pairs, or 7,774
+pairs total. The equal-total mixed control used 3,886 pairs total. The
+manifest, S-UNIWARD 0.4 bpp condition, native centre crop, seed, batch size and
+learning rate remain fixed.
+
+| Direction | Equal-total 300 epochs | Full union 300 epochs | Change |
+|---|---:|---:|---:|
+| `mixed_to_real` balanced accuracy | 0.6427 | **0.7305** | +0.0878 |
+| `mixed_to_real` ROC-AUC | 0.7553 | **0.8388** | +0.0835 |
+| `mixed_to_ai` balanced accuracy | 0.6304 | **0.6555** | +0.0251 |
+| `mixed_to_ai` ROC-AUC | 0.7192 | **0.7520** | +0.0328 |
+| Natural minus AI balanced-accuracy gap | +0.0123 | **+0.0749** | +0.0626 |
+
+**Observation.** The larger mixed recipe improves both domains, with a much
+larger improvement on natural covers. It also slightly exceeds the 500-epoch
+equal-total seed-1 run on both domains. The selected checkpoint is epoch 214
+of 300, at validation loss 0.5285, so this run does not show the same
+end-of-budget behavior as the original 300-epoch mixed control.
+
+**Interpretation.** The two sensitivity runs now agree that the very small
+natural-minus-AI gap from the equal-total 300-epoch seed-1 model was not stable
+under more training exposure. Their gaps are similar: 7.49 points for the
+full-union run and 8.21 points for the 500-epoch equal-total run. This supports
+the direction that the current AI-generated covers are harder, but both values
+remain one-seed sensitivity results.
+
+**Design limitation.** Holding epochs fixed does not hold optimizer updates
+fixed. The full-union run performs about 145,800 updates, compared with about
+72,900 for the equal-total 300-epoch run and 121,500 for the equal-total
+500-epoch run. The gain therefore combines more unique training pairs with
+more optimization steps. It cannot be attributed to data volume alone without
+a step-matched control.
+
+Detailed review:
+[[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]]. W&B run:
+`hgsctm2p`. The local result-folder path was not present in the supplied W&B
+export and remains to be recorded.
