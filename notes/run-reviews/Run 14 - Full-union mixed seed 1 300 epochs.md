@@ -10,7 +10,7 @@ updated: 2026-10-26
 ## Identity and purpose
 
 - Date: 2026-10-25 to 2026-10-26
-- Result folder: not present in the provided W&B export; confirm on the GPU
+- Result folder: `results/srnet_20261025_145314`
 - W&B run: `hgsctm2p`
 - Scientific role: mixed-training-volume sensitivity check
 - Detector: SRNet
@@ -108,8 +108,6 @@ of the larger mixed-training recipe.
 - This is one seed. Its zero standard deviations are bookkeeping values, not
   uncertainty estimates.
 - The result does not replace the three-seed equal-total primary condition.
-- The local result-folder path is missing from the provided W&B files. Record
-  it before using the checkpoint as final evidence.
 - The next cheap check is to evaluate this saved checkpoint on the already
   prepared SD3 and realistic-prompt FLUX test sets. That will show whether the
   improvement transfers beyond the base FLUX condition without retraining.

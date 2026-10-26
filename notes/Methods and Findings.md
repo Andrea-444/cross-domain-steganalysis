@@ -1157,5 +1157,4 @@ a step-matched control.
 
 Detailed review:
 [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]]. W&B run:
-`hgsctm2p`. The local result-folder path was not present in the supplied W&B
-export and remains to be recorded.
+`hgsctm2p`. Result folder: `results/srnet_20261025_145314`.
