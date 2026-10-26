@@ -103,19 +103,66 @@ more optimization steps, or both. A step-matched control would be required to
 separate those explanations. The result is still useful as a practical test
 of the larger mixed-training recipe.
 
-## Limitations and next step
+## External AI-cover evaluations
+
+The selected full-union checkpoint was evaluated without retraining on the
+same 1,000-pair SD3 and realistic-prompt FLUX test sets used in Runs 12 and
+13.
+
+| AI test set | Balanced accuracy | ROC-AUC | F1 | MCC | Confusion matrix |
+|---|---:|---:|---:|---:|---|
+| Base FLUX | 0.6555 | 0.7520 | 0.6203 | 0.3166 | 729, 245 / 426, 548 |
+| Realistic-prompt FLUX | **0.7350** | **0.8412** | 0.7254 | 0.4712 | 770, 230 / 300, 700 |
+| SD3 | 0.5880 | 0.6841 | 0.4425 | 0.2063 | 849, 151 / 673, 327 |
+
+Relative to the equal-total 300-epoch mixed seed-1 checkpoint:
+
+| Test set | Balanced-accuracy change | ROC-AUC change |
+|---|---:|---:|
+| Realistic-prompt FLUX | **+0.0280** | **+0.0293** |
+| SD3 | -0.0025 | **+0.0193** |
+
+**Observation.** The larger recipe improves realistic-prompt FLUX on both
+metrics. On SD3, balanced accuracy is essentially unchanged while ROC-AUC
+improves. The SD3 confusion matrix explains the difference: specificity is
+high at 0.849, but stego recall is only 0.327. The model ranks SD3 images more
+usefully than before, but its fixed decision threshold still misses most
+stego images.
+
+**Interpretation.** More mixed training exposure helps within the FLUX
+generator family, including the prompt-shifted set. It does not remove the
+generator shift to SD3. Threshold calibration may contribute to the low SD3
+balanced accuracy, but choosing a threshold on this test set would be test
+leakage; any calibration experiment would need a separate validation set.
+
+Evaluation result folders:
+
+- SD3:
+  `results/srnet_eval_genimagepp-sd3-full-union-suniward040_20261026_154127`
+- Realistic-prompt FLUX:
+  `results/srnet_eval_genimagepp-flux-realistic-full-union-suniward040_20261026_154150`
+
+## Limitations and status
 
 - This is one seed. Its zero standard deviations are bookkeeping values, not
   uncertainty estimates.
 - The result does not replace the three-seed equal-total primary condition.
-- The next cheap check is to evaluate this saved checkpoint on the already
-  prepared SD3 and realistic-prompt FLUX test sets. That will show whether the
-  improvement transfers beyond the base FLUX condition without retraining.
+- Both external-evaluation summaries record `repository_dirty: true`. The
+  checkpoint hash and evaluation commit are preserved, but the uncommitted GPU
+  files were not enumerated in these artifacts.
+- The SD3 threshold behavior is an observation, not permission to tune on the
+  final test set.
 
 ## Evidence used
 
 - `/Users/andrea/Downloads/config (1).yaml`
 - `/Users/andrea/Downloads/output (1).log`
 - `/Users/andrea/Downloads/wandb-summary (1).json`
+- `/Users/andrea/Pictures/config.json`
+- `/Users/andrea/Pictures/summary.json`
+- `/Users/andrea/Desktop/config.json`
+- `/Users/andrea/Desktop/summary.json`
 - [[run-reviews/Run 04 - Mixed seed 1 300 epochs]]
 - [[run-reviews/Run 11 - Mixed seed 1 500 epochs]]
+- [[run-reviews/Run 12 - SD3 external checkpoint evaluation]]
+- [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]]

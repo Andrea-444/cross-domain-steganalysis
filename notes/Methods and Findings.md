@@ -1155,6 +1155,31 @@ fixed. The full-union run performs about 145,800 updates, compared with about
 more optimization steps. It cannot be attributed to data volume alone without
 a step-matched control.
 
+The selected checkpoint was then evaluated without retraining on the two
+prepared external AI-cover sets:
+
+| Mixed seed-1 condition | Base FLUX BA / AUC | Realistic FLUX BA / AUC | SD3 BA / AUC |
+|---|---:|---:|---:|
+| Equal-total, 300 epochs | 0.6304 / 0.7192 | 0.7070 / 0.8119 | 0.5905 / 0.6648 |
+| Equal-total, 500 epochs | 0.6371 / 0.7260 | 0.7075 / 0.8141 | 0.5585 / 0.6247 |
+| Full union, 300 epochs | **0.6555 / 0.7520** | **0.7350 / 0.8412** | 0.5880 / **0.6841** |
+
+**External-evaluation observation.** Against the equal-total 300-epoch seed-1
+checkpoint, the full-union checkpoint gains 0.0280 balanced accuracy and
+0.0293 ROC-AUC on realistic-prompt FLUX. On SD3, balanced accuracy decreases
+by 0.0025 while ROC-AUC gains 0.0193. The SD3 checkpoint has 0.849 specificity
+but only 0.327 stego recall.
+
+**External-evaluation interpretation.** The larger recipe improves transfer
+within the FLUX generator family, but it does not remove the shift to SD3. The
+higher SD3 ROC-AUC with nearly unchanged balanced accuracy suggests that the
+fixed threshold is part of the error pattern. It must not be retuned on the
+test set; a threshold-calibration study would need a separate validation set.
+
 Detailed review:
 [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]]. W&B run:
-`hgsctm2p`. Result folder: `results/srnet_20261025_145314`.
+`hgsctm2p`. Training result folder: `results/srnet_20261025_145314`.
+External result folders:
+`results/srnet_eval_genimagepp-sd3-full-union-suniward040_20261026_154127`
+and
+`results/srnet_eval_genimagepp-flux-realistic-full-union-suniward040_20261026_154150`.
