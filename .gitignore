@@ -7,9 +7,13 @@ external/
 stego_runs/
 .idea/
 
-# Claude Code: share the project skills, keep machine-local settings out.
-.claude/settings.local.json
+# Local editor and agent tooling. Project-wide research rules remain in
+# AGENTS.md and agent-instructions/.
+.claude/
+.agents/
+skills-lock.json
 .gitflow/
+notes/.obsidian/
 
 # Everything a run writes stays local. Tracking a path that the pipeline also
 # writes makes `git pull` fail on any machine that generated the same file, and
@@ -21,6 +25,11 @@ results/
 # `git status --porcelain` non-empty, which sets repository_dirty in the
 # provenance of every tracked run and hides a genuinely modified checkout.
 wandb/
+run-logs/
+*.log
 
 # Evidence worth keeping in the repository is copied into evidence/ by hand.
 # No command writes there, so it never collides with a run.
+
+# The canonical thesis workspace is Overleaf; keep the local mirror untracked.
+/thesis/
