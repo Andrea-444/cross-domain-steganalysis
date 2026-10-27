@@ -1,4 +1,0 @@
-interface:
-  display_name: "Gitflow Feature Workflow"
-  short_description: "Strict Gitflow for cross-domain steganalysis repository changes"
-  default_prompt: "Use $gitflow-feature-workflow to implement this repository change with the correct Gitflow branch, test-first development, and the project's research guardrails."
