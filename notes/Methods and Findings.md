@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-26
+updated: 2026-10-27
 audience: thesis-writing
 ---
 
@@ -1183,3 +1183,37 @@ External result folders:
 `results/srnet_eval_genimagepp-sd3-full-union-suniward040_20261026_154127`
 and
 `results/srnet_eval_genimagepp-flux-realistic-full-union-suniward040_20261026_154150`.
+
+## 15. Lower-payload sensitivity: natural seed 1 at 0.2 bpp
+
+The first S-UNIWARD 0.2 bpp detector was trained on natural covers with seed 1
+for 300 epochs. The clean covers, splits, preprocessing, detector, seed and
+training settings match the 0.4 bpp natural seed-1 condition. The payload is
+the intended change.
+
+| Direction and metric | 0.4 bpp | 0.2 bpp | Change |
+|---|---:|---:|---:|
+| `real_to_real` balanced accuracy | 0.7608 | **0.5965** | -0.1643 |
+| `real_to_real` ROC-AUC | 0.8780 | **0.6600** | -0.2180 |
+| `real_to_ai` balanced accuracy | 0.5077 | 0.5015 | -0.0062 |
+| `real_to_ai` ROC-AUC | 0.5288 | 0.5065 | -0.0223 |
+
+**Observation.** Halving the payload reduces natural same-domain balanced
+accuracy by 16.43 percentage points and ROC-AUC by 21.80 points. The natural
+detector still learns an above-chance signal at 0.2 bpp, while natural-to-AI
+transfer remains at chance.
+
+**Interpretation.** Lower payload makes the embedding harder to detect, as
+expected. It does not improve cross-domain transfer. The smaller domain gap at
+0.2 bpp comes from weaker same-domain detection, not stronger AI-domain
+generalization.
+
+The training curve is also slower. Training loss first falls below 0.69 at
+epoch 119, and the selected checkpoint is epoch 286 of 300 at validation loss
+0.6756. This one-seed value remains a lower-bound sensitivity result. The
+AI-trained and mixed-domain 0.2 bpp stages are needed before comparing cover
+domains under the lower payload.
+
+Detailed review:
+[[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
+`jto6cuff`. Result folder: `results/srnet_20261026_160301`.
