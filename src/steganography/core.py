@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -21,6 +22,14 @@ from src.datasets.manifest import (
     validate_clean_manifest,
     write_manifest,
 )
+from src.logging_config import (
+    ProgressReporter,
+    configure_logging,
+    get_logger,
+    success_line,
+)
+
+LOGGER = get_logger(__name__)
 
 
 CONSEAL_ALGORITHMS = {"wow", "suniward", "hill", "mipod"}
@@ -51,7 +60,7 @@ def _configure_mipod_cache(cl, cache_root: Path) -> None:
     def load_lookup_table():
         if lookup_path.exists():
             return np.load(lookup_path)["ixlnx3"]
-        print("Preparing MiPOD lookup table. This one-time step can take a few minutes.")
+        LOGGER.info("Preparing MiPOD lookup table. This one-time step can take a few minutes.")
         values = definitions.prepare_lookup_table(max_val=1000, resolution=100)
         np.savez(lookup_path, ixlnx3=values)
         return values
@@ -103,6 +112,56 @@ def timestamped_run_dir(output: str | Path, label: str) -> Path:
     return path
 
 
+def cohort_identifier(manifest: str | Path, length: int = 12) -> str:
+    """Short content hash of a clean manifest.
+
+    Image IDs are stable across cohorts, so two cohorts prepared differently
+    from the same sources share them while holding different pixels. Keying the
+    stego cache on image_id alone would let one cohort silently reuse the
+    other's stego images, pairing a stego image with a clean cover it was not
+    derived from. The cohort identifier keeps their caches apart.
+    """
+    digest = hashlib.sha256()
+    with open(manifest, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:length]
+
+
+def embedding_ledger(
+    runs_directory: str | Path, cohort_id: str | None = None
+) -> list[dict[str, object]]:
+    """Report which embedding conditions have already been run.
+
+    Reads the configuration each run writes, so the history is derived from the
+    runs themselves rather than from separate bookkeeping that could drift.
+    """
+    runs_directory = Path(runs_directory)
+    if not runs_directory.is_dir():
+        return []
+    entries: list[dict[str, object]] = []
+    for config_path in sorted(runs_directory.glob("*/config.json")):
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if cohort_id is not None and config.get("cohort_id") != cohort_id:
+            continue
+        entries.append({
+            "run_dir": str(config_path.parent.resolve()),
+            "cohort_id": config.get("cohort_id"),
+            "backend": config.get("backend"),
+            "algorithm": config.get("algorithm"),
+            "payload_bpp": config.get("payload_bpp"),
+            "seed": config.get("seed"),
+            "record_count": config.get("record_count"),
+            "generated_count": config.get("generated_count"),
+            "reused_count": config.get("reused_count"),
+            "input_manifest": config.get("input_manifest"),
+        })
+    return entries
+
+
 def benchmark_manifest(
     manifest: str | Path,
     algorithm: str,
@@ -130,10 +189,20 @@ def benchmark_manifest(
     payload_label = f"p{int(round(payload_bpp * 100)):03d}"
     label = f"{backend}_{algorithm}_{payload_label}"
     run_dir = timestamped_run_dir(output, label)
-    cache_root = Path(cache_dir) / label / f"seed_{seed}" if cache_dir else None
+    cohort_id = cohort_identifier(manifest)
+    cache_root = (
+        Path(cache_dir) / label / f"cohort_{cohort_id}" / f"seed_{seed}"
+        if cache_dir
+        else None
+    )
     stego_records: list[dict[str, object]] = []
     generated_count = 0
     reused_count = 0
+    LOGGER.info(
+        "Embedding %s at %s bpp, seed %s, over %d covers.",
+        algorithm, payload_bpp, seed, len(records),
+    )
+    progress = ProgressReporter(LOGGER, total=len(records), label="embed")
 
     for index, record in enumerate(records):
         clean_path = Path(str(record["clean_path"]))
@@ -184,6 +253,7 @@ def benchmark_manifest(
             Image.fromarray(stego, mode="L").save(destination, format="PNG")
             generated_count += 1
 
+        progress.advance()
         stego_records.append(
             {
                 **record,
@@ -195,6 +265,7 @@ def benchmark_manifest(
             }
         )
 
+    progress.finish()
     output_manifest = write_manifest(run_dir / "dataset_manifest.jsonl", stego_records)
     config = {
         "backend": backend,
@@ -202,6 +273,8 @@ def benchmark_manifest(
         "payload_bpp": payload_bpp,
         "seed": seed,
         "input_manifest": str(Path(manifest).resolve()),
+        "input_manifest_sha256": cohort_identifier(manifest, length=64),
+        "cohort_id": cohort_id,
         "limit_per_domain": limit_per_domain,
         "record_count": len(records),
         "generated_count": generated_count,
@@ -212,10 +285,14 @@ def benchmark_manifest(
         json.dumps(config, indent=2),
         encoding="utf-8",
     )
-    print(f"Generated {generated_count} stego images.")
-    print(f"Reused {reused_count} cached stego images.")
-    print(f"Run folder: {run_dir.resolve()}")
-    print(f"Manifest: {output_manifest.resolve()}")
+    LOGGER.info(
+        success_line(
+            f"Generated {generated_count} stego images. "
+            f"Reused {reused_count} cached stego images."
+        )
+    )
+    LOGGER.info("Run folder: %s", run_dir.resolve())
+    LOGGER.info("Manifest: %s", output_manifest.resolve())
     return output_manifest
 
 
@@ -263,7 +340,7 @@ def setup_openstego(output: str | Path = "external/openstego") -> Path:
     destination = output / "openstego.jar"
     shutil.copy2(jars[0], destination)
     (output / "VERSION").write_text(str(release.get("tag_name", "unknown")), encoding="utf-8")
-    print(f"OpenStego installed at: {destination.resolve()}")
+    LOGGER.info(f"OpenStego installed at: {destination.resolve()}")
     return destination
 
 
@@ -334,7 +411,7 @@ def openstego_embed(
     subprocess.run(command, check=True)
     if not output.exists():
         raise RuntimeError("OpenStego did not create the requested stego file.")
-    print(f"Recoverable stego image: {output.resolve()}")
+    LOGGER.info(f"Recoverable stego image: {output.resolve()}")
     return output
 
 
@@ -364,7 +441,7 @@ def openstego_extract(
     after = {path.resolve() for path in output_dir.iterdir()}
     if not after - before:
         raise RuntimeError("OpenStego did not extract a payload file.")
-    print(f"Extracted payload directory: {output_dir.resolve()}")
+    LOGGER.info(f"Extracted payload directory: {output_dir.resolve()}")
     return output_dir
 
 
@@ -398,6 +475,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    ledger = subparsers.add_parser(
+        "ledger",
+        help="List embedding conditions already run, so work is not repeated.",
+    )
+    ledger.add_argument("--runs", default="data/stego/runs")
+    ledger.add_argument(
+        "--manifest",
+        default=None,
+        help="Restrict to runs for this clean manifest's cohort.",
+    )
+
     setup = subparsers.add_parser("setup-openstego")
     setup.add_argument("--output", default="external/openstego")
 
@@ -419,6 +507,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_logging()
     args = parse_args()
     if args.command == "benchmark":
         benchmark_manifest(
@@ -432,6 +521,31 @@ def main() -> None:
             cache_dir=args.cache_dir,
             limit_per_domain=args.limit_per_domain,
         )
+    elif args.command == "ledger":
+        cohort = cohort_identifier(args.manifest) if args.manifest else None
+        entries = embedding_ledger(args.runs, cohort_id=cohort)
+        if cohort:
+            LOGGER.info(f"Cohort {cohort} ({Path(args.manifest).name})")
+        if not entries:
+            LOGGER.info("No embedding runs recorded.")
+            return
+        LOGGER.info(
+            f"{'algorithm':<12}{'bpp':>6}{'seed':>6}{'covers':>8}"
+            f"{'new':>6}{'reused':>8}  cohort       run"
+        )
+        for entry in entries:
+            LOGGER.info(
+                f"{str(entry['algorithm']):<12}"
+                f"{str(entry['payload_bpp']):>6}"
+                f"{str(entry['seed']):>6}"
+                f"{str(entry['record_count']):>8}"
+                f"{str(entry['generated_count']):>6}"
+                f"{str(entry['reused_count']):>8}"
+                f"  {str(entry['cohort_id'] or '-'):<12} "
+                f"{Path(str(entry['run_dir'])).name}"
+            )
+        LOGGER.info(f"\n{len(entries)} run(s). Re-running a listed condition reuses its cache.")
+        return
     elif args.command == "setup-openstego":
         setup_openstego(args.output)
     elif args.command == "embed":

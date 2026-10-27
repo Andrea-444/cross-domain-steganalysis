@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import subprocess
@@ -10,7 +11,20 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from src.datasets.extractor import extract_selection_stage
+from src.datasets.index import build_dataset_index
+from src.datasets.acquisition import add_arguments as add_acquisition_arguments
+from src.datasets.audit import add_arguments as add_audit_arguments
+from src.datasets.rebalance import add_arguments as add_rebalance_arguments
+from src.datasets.rebalance import run as run_rebalance
+from src.datasets.recompress import add_arguments as add_recompress_arguments
+from src.datasets.recompress import run as run_recompress
+from src.datasets.audit import run as run_audit
+from src.datasets.acquisition import run as run_acquisition
+from src.datasets.class_mapping import build_genimagepp_class_maps
+from src.logging_config import configure_logging, get_logger
 from src.datasets.manifest import stable_id, write_manifest
+from src.datasets.selection import create_selection_manifest
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
@@ -29,6 +43,9 @@ GENIMAGE_GENERATORS = {
     "vqdm": "VQDM/",
     "wukong": "wukong/",
 }
+
+
+LOGGER = get_logger(__name__)
 
 
 def list_images(root: str | Path) -> list[Path]:
@@ -133,9 +150,9 @@ def prepare_domains(
 
     manifest_path = output / "manifests" / f"{name}_clean.jsonl"
     write_manifest(manifest_path, sorted(records, key=lambda record: str(record["image_id"])))
-    print(f"Prepared {balanced_count} real and {balanced_count} AI covers.")
-    print(f"Processed data: {dataset_root.resolve()}")
-    print(f"Manifest: {manifest_path.resolve()}")
+    LOGGER.info(f"Prepared {balanced_count} real and {balanced_count} AI covers.")
+    LOGGER.info(f"Processed data: {dataset_root.resolve()}")
+    LOGGER.info(f"Manifest: {manifest_path.resolve()}")
     return manifest_path
 
 
@@ -222,7 +239,7 @@ def download_genimage(
         destination = generator_root / Path(file.path).name
         if destination.exists():
             continue
-        print(f"Downloading {file.path}")
+        LOGGER.info(f"Downloading {file.path}")
         result = gdown.download(id=file.id, output=str(destination), quiet=False)
         if result is None:
             raise RuntimeError(f"Failed to download {file.path}")
@@ -305,6 +322,11 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--output", default="data/raw")
     download.add_argument("--accept-large-download", action="store_true")
 
+    add_acquisition_arguments(subparsers)
+    add_audit_arguments(subparsers)
+    add_recompress_arguments(subparsers)
+    add_rebalance_arguments(subparsers)
+
     prepare = subparsers.add_parser("prepare", help="Normalize two local domain folders.")
     prepare.add_argument("--real-src", required=True)
     prepare.add_argument("--ai-src", required=True)
@@ -314,11 +336,188 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--limit-per-domain", type=int, default=None)
     prepare.add_argument("--size", type=int, default=256)
     prepare.add_argument("--seed", type=int, default=42)
+
+    index = subparsers.add_parser(
+        "index",
+        help="Index native image candidates in a directory or archive.",
+    )
+    index.add_argument("--input", required=True)
+    index.add_argument("--dataset-id", required=True)
+    index.add_argument("--dataset-version", required=True)
+    index.add_argument("--domain", choices=["real", "ai"], required=True)
+    index.add_argument("--output", required=True)
+    index.add_argument("--class-map", default=None)
+    index.add_argument("--class-map-member-column", default="source_member")
+    index.add_argument("--class-map-class-column", default="class_id")
+    index.add_argument("--no-parent-class", action="store_true")
+    index.add_argument("--allow-unclassified", action="store_true")
+
+    select = subparsers.add_parser(
+        "select",
+        help="Create a deterministic class-matched selection manifest.",
+    )
+    select.add_argument("--real-index", required=True)
+    select.add_argument("--ai-index", required=True)
+    select.add_argument("--output", required=True)
+    select.add_argument("--count-per-domain", type=int, default=6000)
+    select.add_argument("--audit-count", type=int, default=100)
+    select.add_argument("--pilot-total", type=int, default=500)
+    select.add_argument("--seed", type=int, default=42)
+    select.add_argument("--train-ratio", type=float, default=2 / 3)
+    select.add_argument("--val-ratio", type=float, default=1 / 6)
+
+    extract = subparsers.add_parser(
+        "extract",
+        help="Incrementally materialize audit, pilot, or full selections.",
+    )
+    extract.add_argument("--selection-manifest", required=True)
+    extract.add_argument("--output", default="data/raw/selected")
+    extract.add_argument("--stage", choices=["audit", "pilot", "full"], required=True)
+    extract.add_argument("--extraction-manifest", default=None)
+    extract.add_argument(
+        "--materialization",
+        choices=["copy", "hardlink", "symlink"],
+        default="copy",
+    )
+
+    mapping = subparsers.add_parser(
+        "map-genimagepp",
+        help="Map ImageNet and GenImage++ members to exact ImageNet synset IDs.",
+    )
+    mapping.add_argument("--real-src", required=True)
+    mapping.add_argument("--ai-src", required=True)
+    mapping.add_argument("--imagenet-labels", required=True)
+    mapping.add_argument("--simple-labels", required=True)
+    mapping.add_argument("--class-index", required=True)
+    mapping.add_argument(
+        "--indexed-prompts",
+        default=None,
+        help=(
+            "Official ordered prompt JSON for subsets whose image filenames are "
+            "numeric prompt indices."
+        ),
+    )
+    mapping.add_argument("--output", required=True)
+
+    prepare_selection = subparsers.add_parser(
+        "prepare-selection",
+        help="Normalize an extracted, split-locked selection.",
+    )
+    prepare_selection.add_argument("--extraction-manifest", required=True)
+    prepare_selection.add_argument("--name", required=True)
+    prepare_selection.add_argument("--output", required=True)
+    prepare_selection.add_argument("--size", type=int, default=256)
+    prepare_selection.add_argument(
+        "--preprocess",
+        choices=["fit", "crop"],
+        default="fit",
+        help="fit crops then resamples; crop takes a native centre crop only.",
+    )
+    prepare_selection.add_argument(
+        "--skip-undersized",
+        action="store_true",
+        help="With --preprocess crop, skip images smaller than the crop size.",
+    )
+    prepare_selection.add_argument(
+        "--domains",
+        nargs="+",
+        choices=["real", "ai"],
+        default=None,
+        help="Prepare only the named domains after validating the complete selection.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    configure_logging()
     args = parse_args()
+    if args.command == "rebalance-cohort":
+        run_rebalance(args)
+        return
+
+    if args.command == "recompress-cohort":
+        run_recompress(args)
+        return
+
+    if args.command == "audit-domains":
+        run_audit(args)
+        return
+
+    if args.command in {"fetch-archive", "fetch-images", "fetch-labels"}:
+        run_acquisition(args)
+        return
+
+    if args.command == "map-genimagepp":
+        real_map, ai_map = build_genimagepp_class_maps(
+            real_source=args.real_src,
+            ai_source=args.ai_src,
+            imagenet_labels=args.imagenet_labels,
+            simple_labels=args.simple_labels,
+            class_index=args.class_index,
+            output=args.output,
+            indexed_prompts=args.indexed_prompts,
+        )
+        LOGGER.info(f"Real class map: {real_map.resolve()}")
+        LOGGER.info(f"AI class map: {ai_map.resolve()}")
+        return
+
+    if args.command == "prepare-selection":
+        from src.datasets.preparation import prepare_extracted_selection
+
+        path = prepare_extracted_selection(
+            extraction_manifest=args.extraction_manifest,
+            name=args.name,
+            output=args.output,
+            size=args.size,
+            mode=args.preprocess,
+            skip_undersized=args.skip_undersized,
+            domains=tuple(args.domains) if args.domains else None,
+        )
+        LOGGER.info(f"Manifest: {path.resolve()}")
+        return
+
+    if args.command == "index":
+        path = build_dataset_index(
+            source=args.input,
+            dataset_id=args.dataset_id,
+            dataset_version=args.dataset_version,
+            domain=args.domain,
+            output=args.output,
+            class_map_path=args.class_map,
+            class_map_member_column=args.class_map_member_column,
+            class_map_class_column=args.class_map_class_column,
+            infer_class_from_parent=not args.no_parent_class,
+            allow_unclassified=args.allow_unclassified,
+        )
+        LOGGER.info(f"Dataset index: {path.resolve()}")
+        return
+
+    if args.command == "select":
+        path = create_selection_manifest(
+            real_index=args.real_index,
+            ai_index=args.ai_index,
+            output=args.output,
+            count_per_domain=args.count_per_domain,
+            audit_count=args.audit_count,
+            pilot_total=args.pilot_total,
+            seed=args.seed,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+        )
+        LOGGER.info(f"Selection manifest: {path.resolve()}")
+        return
+
+    if args.command == "extract":
+        result = extract_selection_stage(
+            selection_manifest=args.selection_manifest,
+            output=args.output,
+            stage=args.stage,
+            extraction_manifest=args.extraction_manifest,
+            materialization=args.materialization,
+        )
+        LOGGER.info(json.dumps(result, indent=2))
+        return
+
     if args.command == "prepare":
         prepare_domains(
             real_src=args.real_src,
@@ -350,8 +549,8 @@ def main() -> None:
             preferred_split=args.split if args.source == "genimage" else None,
         )
     except ValueError:
-        print(f"Downloaded to {downloaded.resolve()}.")
-        print("Run `python -m src.datasets prepare` with explicit domain folders.")
+        LOGGER.info(f"Downloaded to {downloaded.resolve()}.")
+        LOGGER.info("Run `python -m src.datasets prepare` with explicit domain folders.")
         return
 
     name = "kaggle" if args.source == "kaggle" else f"genimage_{args.generator}"

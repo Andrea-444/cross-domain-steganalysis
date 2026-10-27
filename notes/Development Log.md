@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-08-31
+updated: 2026-10-14
 ---
 
 # Development Log
@@ -38,3 +38,263 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The generic `python` command is unavailable in the current non-interactive shell; the project environment's Python executable was used. Current SRNet training prints epoch metrics but does not preserve structured history or a checkpoint, and the experiment runner discards returned test probabilities.
 - **Next step:** Review the proposed protocol with the project team, record accepted choices in [[Decisions]], then implement local structured experiment outputs before adding W&B as an optional mirror.
 - **Related files/results:** [[Pipeline Summary and Experiment Plan]], [[Tasks]], [[Architecture]].
+
+## 2026-09-01 — Typed pipeline architecture implemented
+
+- **Goal:** Connect the existing dataset, embedding, detector, evaluation, and tracking boundaries through one reproducible workflow.
+- **Work completed:** Added typed JSON configuration, persisted pipeline context, explicit stages, one runner/CLI, shared evaluation metrics, optional artifact-first W&B logging, a smoke configuration, and focused stage/composition tests.
+- **Commands or experiment configuration:** Validated `configs/pipeline.smoke.example.json`, checked the pipeline CLI, and ran the full unit-test suite. No research training run was executed.
+- **Result:** All 15 tests passed. Existing domain CLIs remain available, while `python -m src.pipeline --config <file>` now provides composed non-interactive execution.
+- **Problems or surprises:** W&B is intentionally optional and was not installed or contacted during verification.
+- **Next step:** Review and adjust the smoke configuration paths, then run a small end-to-end smoke test only when the intended local inputs and compute environment are ready.
+- **Related files/results:** [[Architecture]], [[Decisions]], `src/pipeline/`, `src/evaluation/`, `src/tracking/`.
+
+## 2026-09-01 — Incremental dataset selection implemented
+
+- **Goal:** Select the audit, pilot, and full image cohorts once so later stages reuse the same images without overlap or test-set leakage.
+- **Work completed:** Added native-source indexing, deterministic class-matched selection manifests, locked pair-safe splits, cumulative cohort labels, checksum-verified incremental extraction, CLI commands, and synthetic tests for directories, ZIP, and TAR.ZST archives.
+- **Commands or experiment configuration:** Ran `python -m unittest discover -s tests -v`; no dataset was downloaded or extracted.
+- **Result:** All 21 tests passed. Audit uses 100 images per domain, pilot cumulatively uses 500, and the planned full cohort uses 6,000 by default. Final-test images are selected at the start but excluded from audit and pilot materialization.
+- **Problems or surprises:** The actual GenImage++ archive layout and the ImageNet validation-label mapping still need verification against downloaded source files before creating the real indexes.
+- **Next step:** Obtain the source archives and label metadata, build the indexes and selection manifest, then extract and inspect the 100-image-per-domain audit cohort.
+- **Related files/results:** [[Architecture]], [[Decisions]], `src/datasets/index.py`, `src/datasets/selection.py`, `src/datasets/extractor.py`.
+
+## 2026-09-03 — Gitflow workflow skill added
+
+- **Goal:** Record the repository's branching, verification, and artifact rules as an executable workflow instead of re-deriving them each session.
+- **Work completed:** Added the `gitflow-feature-workflow` skill under `.claude/skills/` with feature/hotfix/release playbooks, a plan-handoff reference, a project-context reference for the `AGENTS.md` + `agent-instructions/` + `notes/` tiers, and a self-check script. Initialized the `dev` branch from `main` and published it.
+- **Commands or experiment configuration:** `sh .claude/skills/gitflow-feature-workflow/scripts/check_skill.sh`; full unit suite run bare to check its exit code.
+- **Result:** All 21 tests passed and the skill self-check passed. Branch prefixes are `feat`, `bug`, `spec`, and `junk`; `wip` was dropped because it labels a state rather than a kind of change and encourages long-lived divergence from `dev`.
+- **Problems or surprises:** Two environment gotchas are now recorded in the skill: a bare `python` and `conda` are unavailable in non-interactive shells, so the environment interpreter must be called by absolute path, and `head` on this machine resolves to LWP's HTTP tool rather than GNU `head`. Piping the test suite also hides its exit code.
+- **Next step:** Use the skill for the detector observability work — preserved test probabilities, epoch history, checkpoints, per-seed outputs, and MPS device selection.
+- **Related files/results:** `.claude/skills/gitflow-feature-workflow/`, `.gitignore`.
+
+## 2026-09-04 — Detector run observability implemented
+
+- **Goal:** Make one SRNet protocol run interpretable after the fact instead of discarding the evidence needed to analyse it.
+- **Work completed:** Device selection now prefers CUDA, then MPS, then CPU. Training returns structured epoch history including validation accuracy and balanced accuracy, and writes the selected checkpoint with its selection metadata. The runner keeps per-image predictions and probabilities for all four directions, preserves per-seed metrics next to the aggregate summary, and records provenance: manifest SHA-256, dataset counts, embedding condition, detector commit, repository commit and dirty flag, device, platform, dependency versions, and timing. Verified that the reference model ends in `LogSoftmax`, so the retained score is a true `P(stego)`; ROC-AUC and PR-AUC are therefore reported.
+- **Commands or experiment configuration:** Full suite run bare; plus a two-epoch integration run on the existing 20-record S-UNIWARD 0.2 bpp smoke manifest to exercise the unmocked path.
+- **Result:** 36 tests passed, exit code 0. The smoke run selected `mps` automatically and produced the full `history/`, `checkpoints/`, and `predictions/` layout. Its metrics are meaningless (7 training images) and are development verification only, not evidence.
+- **Problems or surprises:** `embedding_seed` is assigned per image, so the first provenance implementation recorded a list of every distinct seed. It now summarises a varying seed as a count; the run-level master seed remains in the stego run's own `config.json`. Measured MPS at roughly 19x CPU throughput for a batch-16 training step, which is what makes the full matrix feasible locally.
+- **Next step:** Resume/idempotency for interrupted multi-seed runs, the protocol-level aggregator, and mirroring the new fields into W&B. Separately, the dataset archives still need acquiring before any real cohort exists.
+- **Related files/results:** `src/steganalysis/srnet.py`, `src/steganalysis/experiments.py`, `src/evaluation/metrics.py`, `tests/steganalysis/test_observability.py`.
+
+## 2026-09-04 — End-to-end pipeline verified at 100 covers per domain
+
+- **Goal:** Exercise the composed pipeline on real images before any research cohort exists, to prove the stages connect and the new run outputs are produced.
+- **Work completed:** Added `configs/pipeline.verify100.json` and ran `python -m src.pipeline` over the existing local Kaggle images at 100 covers per domain, S-UNIWARD 0.4 bpp, one seed, fifteen epochs.
+- **Commands or experiment configuration:** `python -m src.pipeline --config configs/pipeline.verify100.json`.
+- **Result:** All four stages completed in 1m40s, exit code 0. 200 covers normalized to 256x256 grayscale, split 70/15/15 per domain. Zero pair-split leaks. Embedding altered 4,422-6,281 pixels per image with every change exactly +/-1, as adaptive embedding requires. The detector auto-selected `mps` and produced the full `history/`, `checkpoints/`, and `predictions/` layout. All four directions scored 0.500 balanced accuracy with ROC-AUC 0.49-0.51.
+- **Problems or surprises:** The chance-level result is expected and is not evidence: 70 training covers gives SRNet 140 training images, far too few to learn. More importantly, this Kaggle pair carries the exact confound the project exists to avoid — natural covers are JPEG at 99 distinct resolutions (mostly 1080x720), AI covers are lossless PNG at a uniform 512x512. The two domains therefore differ in compression history and in downsampling ratio (about 4.2x versus 2x) before any embedding happens. This data is suitable for pipeline verification only. The exact Kaggle `owner/dataset-name` is not recorded anywhere in the repository; only `source: local-kaggle` survives in the manifests.
+- **Next step:** Record the Kaggle dataset identifier. Keep using this pair for pipeline work only, and acquire the GenImage++ FLUX and ImageNet archives for any run intended as evidence.
+- **Related files/results:** `configs/pipeline.verify100.json`, `results/pipeline/verify100-suniward-p040_20260904_130956`, `results/srnet_20260904_131025`.
+
+## 2026-09-04 — Hugging Face acquisition path added
+
+- **Goal:** Replace the local Kaggle images with the recorded working pair, and make both sources reachable without downloading corpora whole.
+- **Work completed:** Added `src/datasets/acquisition.py` with `fetch-archive` (one file from a Hugging Face dataset repo, reused if already present) and `fetch-images` (streams an image dataset into `<class>/` directories). Both write the original encoded bytes rather than re-saving. Added `huggingface_hub` and `datasets` to `requirements.txt`. Cleared `data/processed` and `data/stego`; kept `src/raw_data`, `results/`, and `stego_runs/`.
+- **Commands or experiment configuration:** `python -m unittest discover -s tests -t .`
+- **Result:** 45 tests passed, exit code 0. Confirmed GenImage++ `archives/flux.tar.zst` is 7.22 GB of a 204 GB repository and is not gated; ImageNet-1k is gated behind the ImageNet Terms of Access and needs an authenticated account.
+- **Problems or surprises:** `tests/datasets/` shadowed the installed `datasets` library, because discovery placed `tests/` itself on `sys.path`. The documented test command now passes `-t .` so the repository root is the top-level directory instead. This changed a documented command in `README.md` and `agent-instructions/DEVELOPMENT_WORKFLOW.md`. Also note the internal directory layout of the GenImage++ archives is not documented on the dataset card, so class inference must be verified by listing the archive before selection.
+- **Next step:** Download the FLUX archive, list its layout, and confirm whether it carries ImageNet synsets before choosing the class scope for 1,000 covers per domain.
+- **Related files/results:** `src/datasets/acquisition.py`, `tests/datasets/test_acquisition.py`, `requirements.txt`.
+
+## 2026-09-29 — Domain confound audit implemented and run on the smoke100 cohort
+
+- **Goal:** Test the gate that everything downstream depends on: are natural and AI covers distinguishable from clean images alone, before any embedding?
+- **Work completed:** Added `src/datasets/audit.py` and the `audit-domains` command. It scores three interpretable features per cover (8x8 blockiness contrast, Laplacian high-pass energy, neighbour-residual spread) and cross-validates a logistic regression that predicts the domain from clean covers only.
+- **Commands or experiment configuration:** `python -m src.datasets audit-domains --manifest data/processed/manifests/imagenet-flux-smoke100_clean.jsonl`
+- **Result:** 55 tests passed. On the 100-per-domain cohort the domains are **partially separable with no steganography present**: balanced accuracy 0.630, ROC-AUC 0.691 against a 0.5 chance baseline. Feature means: blockiness real=0.0042 / ai=0.0130; high-pass energy real=45.77 / ai=34.96; residual spread real=11.44 / ai=8.74.
+- **Problems or surprises:** Two findings run against expectation. The AI covers are *blockier* than the JPEG-sourced natural covers, not less — plausibly the 8x8 latent-patch structure of the FLUX VAE decoder, which survives where JPEG blocking did not. And the natural covers retain markedly more high-frequency energy, consistent with their much gentler downsampling (about 1.95x from ~500x375) versus the AI covers' exact 4x (1024 to 256). The 0.630 figure is a **lower bound**: it comes from three crude hand-crafted features, and SRNet is purpose-built to exploit exactly this kind of residual difference.
+- **Next step:** Decide whether 0.630 is acceptable, and test crop-only preprocessing as the candidate remedy for the resampling mismatch. This is a protocol decision and is not settled here.
+- **Related files/results:** `src/datasets/audit.py`, `tests/datasets/test_audit.py`, `results/audits/imagenet-flux-smoke100_domain_separability.json`.
+
+## 2026-09-29 — Crop-only preprocessing removes the measurable domain confound
+
+- **Goal:** Test whether native-crop preprocessing removes the pre-embedding domain separability found earlier today.
+- **Work completed:** Added `normalize_image` with `fit` and `crop` modes, exposed `--preprocess` and `--skip-undersized` on `prepare-selection`, and added a label-shuffle permutation test to `audit-domains` so a near-chance score can be judged against its null rather than by eye.
+- **Commands or experiment configuration:** `prepare-selection --preprocess crop --skip-undersized` to build `imagenet-flux-smoke100-crop`, then `audit-domains --permutations 200` on both cohorts.
+- **Result:** 62 tests passed. With `fit`, the domains are significantly separable from clean covers alone: balanced accuracy 0.630, ROC-AUC 0.691, permutation p = 0.0050. With `crop`, they are not: balanced accuracy 0.532, ROC-AUC 0.567, permutation p = 0.2736. Crop-only costs one natural cover, which is 170 px on its short side and is recorded in the run configuration.
+- **Problems or surprises:** The blockiness hypothesis recorded this morning was wrong. AI blockiness was attributed to FLUX's 8x8 VAE latent structure, but it falls from 0.0130 under `fit` to 0.0008 under `crop`, so it was produced by the exact-4x LANCZOS downsampling, not by the generator. High-pass energy rises in both domains under crop (real 45.8 to 49.6, ai 35.0 to 42.5) and the gap between them narrows, which is what removing resampling should do.
+- **Next step:** Decide whether to adopt crop-only as the accepted preprocessing and record it in [[Decisions]]. The audit remains a necessary rather than sufficient check: it uses three hand-crafted features, and SRNet may exploit differences they miss.
+- **Related files/results:** `src/datasets/preparation.py`, `src/datasets/audit.py`, `results/audits/imagenet-flux-smoke100_domain_separability.json`, `results/audits/imagenet-flux-smoke100-crop_domain_separability.json`.
+
+## 2026-09-29 — SRNet domain probe overturns the feature-based all-clear
+
+- **Goal:** Ask the actual detector, rather than three hand-crafted features, whether it can identify the cover domain from clean covers alone.
+- **Work completed:** Added `src/steganalysis/domain_probe.py`, which trains SRNet on clean covers labelled by domain with no stego images present. Ran it with three seeds and thirty epochs on both cohorts, using the `fit` cohort as a positive control so that a null on `crop` could be interpreted.
+- **Commands or experiment configuration:** `python -m src.steganalysis.domain_probe --manifest <clean manifest> --seeds 1 2 3 --epochs 30 --batch-size 16`.
+- **Result:** 69 tests passed. Positive control succeeded: on `fit`, SRNet reached balanced accuracy 0.745 (sd 0.050) and ROC-AUC 0.843 (sd 0.034), higher than the three-feature probe's 0.630, confirming the probe has power at this data volume. On `crop`, SRNet still reached balanced accuracy 0.675 (sd 0.056) and ROC-AUC 0.766 (sd 0.049). Per-seed balanced accuracy was [0.676, 0.794, 0.765] for `fit` and [0.632, 0.640, 0.754] for `crop`.
+- **Problems or surprises:** **The feature-based audit gave a false all-clear.** It scored `crop` at 0.532 with permutation p = 0.2736, which reads as chance, while SRNet separates the same covers at 0.675 balanced accuracy. Crop-only genuinely helped, reducing separability from 0.745 to 0.675, but it did not remove it. The documented caveat that the three-feature audit is necessary rather than sufficient proved to be the operative one, and any future gate decision should use the SRNet probe rather than the cheap screen.
+- **Next step:** Separate the two possible causes of the residual separability. Compression history is untouched so far: natural covers are JPEG-sourced and AI covers are lossless PNG, and crop-only does nothing about that. Genuine generative-model pixel statistics are the other candidate, and unlike compression history they are a legitimate property of the domains rather than a confound. Equalizing compression across domains and re-running the probe would distinguish them. This is a protocol decision and is not settled here.
+- **Related files/results:** `src/steganalysis/domain_probe.py`, `results/audits/srnet-probe-fit/summary.json`, `results/audits/srnet-probe-crop/summary.json`.
+
+## 2026-09-29 — Compression equalization does not reduce domain separability
+
+- **Goal:** Determine whether the residual SRNet domain separability under crop-only preprocessing comes from compression history or from intrinsic generative pixel statistics.
+- **Work completed:** Measured the natural sources' JPEG quality from their quantization tables (median 96; 86 of 100 covers at 96). Added `src/datasets/recompress.py` and `recompress-cohort`, which re-encodes chosen domains through JPEG at a given quality and decodes back, storing the result as lossless PNG so only the pixel content carries the new history. Built two variants at quality 96, one adding JPEG to the AI covers only and one to both domains, then ran the SRNet probe with three seeds on each.
+- **Commands or experiment configuration:** `recompress-cohort --quality 96 --domains ai` and `--domains ai real`, then `domain_probe --seeds 1 2 3 --epochs 30`.
+- **Result:** 74 tests passed. Equalizing compression had no meaningful effect on SRNet separability. Balanced accuracy: crop-only 0.675 (sd 0.056), JPEG on AI only 0.661 (sd 0.049), JPEG on both 0.688 (sd 0.086). All three sit within roughly one standard deviation of each other, against 0.745 for the resampled `fit` cohort.
+- **Problems or surprises:** The three-feature audit was fooled again, and more completely than before: it scored the two recompressed variants at 0.502 and 0.497 with permutation p of 0.54 and 0.60, while SRNet separated the same covers at 0.661 and 0.688. It should not be used as a gate. The substantive finding is that the residual separability survives compression equalization, so it is most likely an intrinsic property of FLUX-generated images rather than a preprocessing artifact. That is an inference from one failed intervention, not proof: semantic content, generation resolution, and tonal statistics remain untested as alternative explanations. The test split is only 33 to 34 covers, so each prediction moves balanced accuracy by about three points.
+- **Next step:** Record a preprocessing decision in [[Decisions]]. The evidence supports crop-only, since it removed a real resampling confound, and does not support adding JPEG to the AI covers, since it changed nothing measurable. Whether an intrinsic domain separability of about 0.675 is acceptable for the thesis is a protocol judgement and remains open.
+- **Related files/results:** `src/datasets/recompress.py`, `results/audits/srnet-probe-smoke100-crop-jpegai96/`, `results/audits/srnet-probe-smoke100-crop-jpegboth96/`.
+
+## 2026-10-07 — Preprocessing decisions recorded; duplicate branch retired
+
+- **Goal:** Record the preprocessing and gating conclusions in [[Decisions]] so a second machine reads them as accepted, and remove the superseded duplicate branch.
+- **Work completed:** Added three accepted entries to [[Decisions]]: normalize by native crop without resampling, do not equalize compression history, and gate cohorts with the SRNet probe rather than the three-feature screen. Updated the provisional preprocessing row in [[Experiment Decisions]] and removed its now-settled crop/resize open item. Deleted the remote branch `feat/imagenet-genimagepp-class-matched-cohort`.
+- **Commands or experiment configuration:** No experiment run; notes and branch housekeeping only.
+- **Result:** `origin` now carries only `dev` and `main`. The deleted branch held one commit, `6731390`, an independent implementation of the class-mapping and preparation workflow that `c09bea2` on `dev` had already superseded. It is recoverable by that SHA if ever needed.
+- **Problems or surprises:** None. Note that [[Experiment Decisions]] still lists "Confirm the accessible ImageNet validation archive and its download size" as open, although the gated `ILSVRC/imagenet-1k` streaming path is settled and documented in `README.md`. That item was already stale before this change and was left for the user rather than edited silently.
+- **Next step:** Embed on the crop cohort and run the first real four-direction experiment. SRNet convergence on embedding traces at realistic scale is still unmeasured.
+- **Related files/results:** `notes/Decisions.md`, `notes/Experiment Decisions.md`.
+
+## 2026-10-07 — Untracked the regenerable data artifacts
+
+- **Goal:** Correct yesterday's decision to track dataset indexes and selection manifests.
+- **Work completed:** Removed `data/indexes/` and `data/selections/` from version control with `git rm --cached`, leaving the files in place on disk. Kept the class maps and the audit summaries. Rewrote the `.gitignore` comments, which had recorded the reasoning that this change reverses.
+- **Commands or experiment configuration:** No experiment run.
+- **Result:** Nine files and about 6,350 lines removed from the repository. Three class-map files and six audit summaries remain tracked.
+- **Problems or surprises:** The original justification did not hold. Indexes and selections are regenerable by `index` and `select`, they describe whatever is on one machine's disk rather than a property of the datasets, and selection manifests record absolute local paths so another machine cannot consume them. The claim that they preserved a provenance chain was also wrong on its own terms: the audit summaries reference `data/processed/manifests/*_clean.jsonl`, which was never tracked. `agent-instructions/DATA_AND_ARTIFACTS.md` already says not to commit generated artifacts merely because they are useful locally.
+- **Next step:** Unchanged. Embed on the crop cohort and run the first real four-direction experiment.
+- **Related files/results:** `.gitignore`, `notes/Decisions.md`.
+
+## 2026-10-07 — Embedding isolated per cohort; history ledger added
+
+- **Goal:** Embed the crop cohort without repeating work across methods, and make the embedding history auditable.
+- **Work completed:** The stego cache key now includes a cohort identifier derived from the clean manifest's content hash, and each run records `cohort_id` and `input_manifest_sha256`. Added `python -m src.steganography ledger`, which reports the conditions already run by reading each run's own configuration. Embedded S-UNIWARD at 0.4 bpp, seed 42, on `imagenet-flux-smoke100-crop`.
+- **Commands or experiment configuration:** `benchmark --algorithm suniward --payload-bpp 0.4 --seed 42 --cache-dir data/stego/cache`, run twice, then the same condition on the `fit` cohort.
+- **Result:** 82 tests passed. First run generated 199 stego images, the identical re-run generated 0 and reused 199. The `fit` cohort with the same algorithm, payload and seed generated all 200 rather than reusing, confirming the cohorts no longer share a cache. Verified on the crop run: zero pair-split leaks, every change exactly +/-1, and 6.3 to 10.1 per cent of pixels altered per image.
+- **Problems or surprises:** The previous cache key was backend, algorithm, payload and seed only. Since `fit` and `crop` share image IDs but differ in pixels, embedding both with one cache would have paired stego images with covers they were not derived from, silently. No such run had been made, so no existing artifact is affected.
+- **Next step:** Run the four-direction SRNet experiment on the embedded crop cohort. This is the first real test of whether the detector learns embedding traces, as opposed to the domain signal already measured by the probe.
+- **Related files/results:** `src/steganography/core.py`, `tests/steganography/test_cohort_isolation.py`.
+
+## 2026-10-07 — Consolidated methods and findings record for thesis writing
+
+- **Goal:** Pull the methodological decisions and their supporting numbers into one place usable when writing the thesis, rather than leaving them spread across log entries, decision records, README tables and result JSON.
+- **Work completed:** Added [[Methods and Findings]]. It carries the confound investigation with exact figures read from the result artifacts, the per-seed values, the feature means, the false-negative finding about the cheap screen, a threats-to-validity section, the pipeline provenance summary, and the reproduction commands. Measured observations and interpretation are separated throughout, per `agent-instructions/RESULTS_AND_WRITING.md`.
+- **Commands or experiment configuration:** No experiment run; figures were read from `results/audits/*/summary.json` rather than transcribed from memory.
+- **Result:** The note states prominently that no experimental result exists yet and that every figure in it comes from methodological validation rather than the research protocol. It also addresses the open [[Tasks]] item on recording threats to validity.
+- **Problems or surprises:** None. Four candidate causes of the residual domain separability remain unexcluded and are listed rather than glossed: semantic content, generation resolution, tonal statistics under grayscale conversion, and single-generator scope.
+- **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only, gate it with the probe, then run the first four-direction experiment.
+- **Related files/results:** `notes/Methods and Findings.md`.
+
+## 2026-10-07 — Corrected the recorded resampling factor
+
+- **Goal:** Verify the downsample factor quoted for natural covers after a question about what `fit` actually does.
+- **Work completed:** Measured the effective factor over the 100 natural covers in the smoke cohort and corrected `README.md`, [[Decisions]] and [[Methods and Findings]]. Earlier entries in this log are left as written, since they record what was believed at the time.
+- **Commands or experiment configuration:** Short script over `data/raw/selected/smoke100/real` reading each source's dimensions.
+- **Result:** The recorded figure of about 1.95x was wrong. `ImageOps.fit` crops to the target aspect ratio using the **short** side and then resamples, so the factor is the short side over 256, not the long side. Measured: median 1.46x, mean 1.66x, range 0.66x to 7.59x, against exactly 4.00x for the uniformly 1024x1024 AI covers.
+- **Problems or surprises:** Two findings that strengthen the crop-only decision rather than weaken it. A minimum of 0.66x means some natural covers were **enlarged** under `fit`, and interpolation invents high-frequency content instead of attenuating it, which is worse for a steganalyzer than smoothing. And the factor varied from 0.66x to 7.59x *within* the natural domain, so `fit` applied inconsistent resampling across natural covers as well as unequal resampling between domains. The measured separability figures are unaffected; only the explanatory factor was misquoted.
+- **Next step:** Unchanged. Re-prepare the 6,000-per-domain cohort with crop-only.
+- **Related files/results:** `README.md`, `notes/Decisions.md`, `notes/Methods and Findings.md`.
+
+## 2026-10-07 — Cohort rebalancing after one-sided skip
+
+- **Goal:** Restore per-class domain matching after crop-only preprocessing dropped undersized natural covers from the 6,000-per-domain cohort.
+- **Work completed:** Added `src/datasets/rebalance.py` and the `rebalance-cohort` command. It equalizes domain counts per class **and** per split, choosing which surplus cover to drop deterministically by sorted `image_id`, and records every dropped cover in the run configuration.
+- **Commands or experiment configuration:** `rebalance-cohort --manifest data/processed/manifests/imagenet-flux-smoke100-crop_clean.jsonl --name smoke100-crop-balanced`.
+- **Result:** 89 tests passed. On the GPU machine's full cohort, crop-only kept 11,830 of 12,000 covers: 170 natural covers were under 256 px on the short side, all on the natural side, leaving 5,830 against 6,000 and 98 of 1,000 classes unmatched. Verified locally on the 199-cover crop cohort: 198 kept, 1 AI cover dropped, zero class-and-split mismatches remaining.
+- **Problems or surprises:** The imbalance matters for a reason beyond the recorded class-matching rule. Unequal domain totals would have given the real-trained and AI-trained detectors different training-set sizes (3,887 against 4,000 covers), so a `real_to_real` versus `ai_to_ai` difference could have reflected data volume rather than domain difficulty. Also worth recording for future cohorts: about 2.8 per cent of ImageNet validation covers are below 256 px on the short side, and the index stores `size_bytes` but not dimensions, so these cannot yet be filtered at selection time, which is where the fix belongs.
+- **Next step:** Rebalance the full cohort, gate it with the SRNet domain probe at full scale, then embed and run the four-direction protocol.
+- **Related files/results:** `src/datasets/rebalance.py`, `tests/datasets/test_rebalance.py`.
+
+## 2026-10-07 — Full-scale domain probe: the cover domains are near-perfectly separable
+
+- **Goal:** Gate the full `imagenet-flux-6000-crop-balanced` cohort with the SRNet domain probe before embedding.
+- **Work completed:** Ran the probe on the GPU machine with 3 seeds and 30 epochs on CUDA. Copied the summary into `results/audits/srnet-probe-6000-crop-balanced/`. Updated [[Decisions]] and [[Methods and Findings]], and marked the small-scale separability figures as superseded.
+- **Commands or experiment configuration:** `domain_probe --manifest data/processed/manifests/imagenet-flux-6000-crop-balanced_clean.jsonl --seeds 1 2 3 --epochs 30 --batch-size 32`.
+- **Result:** Balanced accuracy 0.9954 (sd 0.0007) and ROC-AUC 0.9997 (sd 0.0001). Per-seed balanced accuracy 0.9959, 0.9944, 0.9959, with 8, 11 and 8 errors per seed out of 1,948 test covers. Selected epochs 29, 23 and 25. Duration 66 minutes on CUDA.
+- **Problems or surprises:** The small-scale figure of 0.675 was not an estimate of the domain gap; it was the limit of 132 training covers. The documented power caveat was the operative one for a second time. Two consequences follow. First, the crop-only decision can no longer be justified by the measured 0.745 against 0.675 difference, because at full scale `crop` alone saturates the probe; the justification is now that unequal and sometimes magnifying resampling is a known processing artifact worth removing on principle. Running the `fit` probe at full scale would be uninformative, since both variants sit at the ceiling, so it is not worth 66 minutes. Second, the result is consistent with the sources rather than alarming: GenImage++ is published as a benchmark **for** AI-image detection, so separability is a design property of the data.
+- **Next step:** Embed S-UNIWARD at 0.4 bpp on the rebalanced cohort and run the four-direction protocol. Research question 1, comparing `ai_to_ai` with `real_to_real`, is unaffected by domain separability. Research question 2 needs its interpretation narrowed, and a control that separates steganographic-trace mismatch from ordinary distribution shift remains undesigned.
+- **Related files/results:** `results/audits/srnet-probe-6000-crop-balanced/summary.json`.
+
+## 2026-10-07 — Terminal logger and progress reporting
+
+- **Goal:** Report progress during long commands, so a slow run does not look like a stopped run.
+- **Work completed:** Added `src/logging_config.py` from the project-standard configuration Andrea supplied, with two changes this repository needs. Color is written only to a terminal, because runs here are captured by agent sessions and by `subprocess`. `ProgressReporter` reports progress inside a long loop. Wired `configure_logging()` into five entry points, added progress to embedding and preparation, and made the pipeline runner announce each stage.
+- **Commands or experiment configuration:** Three real embedding runs on the 198-cover balanced cohort, with HILL, WOW and MiPOD.
+- **Result:** 108 tests passed. The embedding command now reports count, percentage, rate and remaining minutes at about twenty points in a run. The captured output holds no terminal escape codes.
+- **Problems or surprises:** Two defects appeared during the work. The first was mine: `LOGGER` was never defined in `src/steganography/core.py`, because an insertion anchor did not match, and six tests failed. The second was a design conflict. `success_line` embeds color in the message text, so it bypasses the formatter's terminal check and leaked escape codes into captured output. Those helpers now consult `color_enabled()` separately. A fixed 500-item interval also gave no output at all on a short run, so the interval now derives from the total.
+- **Next step:** Convert the remaining `print()` calls in `src/datasets/` and `src/steganalysis/` to the logger. `src/legacy/` stays unchanged.
+- **Related files/results:** `src/logging_config.py`, `tests/logging/test_logging_config.py`, `agent-instructions/DEVELOPMENT_WORKFLOW.md`.
+
+## 2026-10-07 — Logger applied across every command
+
+- **Goal:** Report progress and status in every command, not only in embedding and preparation.
+- **Work completed:** Converted the remaining 50 `print()` calls in `src/datasets/`, `src/steganalysis/` and `src/steganography/` to the project logger. `src/legacy/` stays unchanged. Added batch progress inside each training epoch in `src/steganalysis/srnet.py` and `src/steganalysis/domain_probe.py`. Added the logger to `src/datasets/extractor.py`.
+- **Commands or experiment configuration:** A two-epoch `experiments` run on the 198-cover S-UNIWARD cohort.
+- **Result:** 108 tests passed. Each training epoch now reports images processed, percentage, rate and remaining minutes. An epoch on 7,770 covers previously printed one line at its end.
+- **Problems or surprises:** My first conversion pass skipped three files. The check asked whether the file imported anything from `src.logging_config`, and those three already imported `configure_logging`, so `get_logger` was never added and the modules failed to import. Also recorded: Andrea's embedding run on the GPU machine finished and generated all 11,660 stego images for cohort `1c232642a387`, S-UNIWARD at 0.4 bpp, seed 42.
+- **Next step:** Push the two unpushed commits once GitHub recovers, then run the four-direction experiment on the embedded cohort.
+- **Related files/results:** `src/logging_config.py`, `src/steganalysis/srnet.py`, `src/steganalysis/domain_probe.py`.
+
+## 2026-10-07 — Stopped tracking paths that a run writes
+
+- **Goal:** Repair a `git pull` failure on the GPU machine, and remove its cause.
+- **Work completed:** Copied the seven probe summaries into `evidence/domain-probes/`, which no command writes to, and added `evidence/README.md`. Removed `data/metadata/` and `results/audits/` from version control. `.gitignore` now ignores `data/` and `results/` completely.
+- **Commands or experiment configuration:** No experiment run.
+- **Result:** Nothing under `data/` or `results/` is tracked. The evidence survives as seven files under `evidence/`, and git recorded them as renames at 100 per cent similarity.
+- **Problems or surprises:** Two faults, both from the same mistake of tracking a path that a run also writes. First, the GPU machine generated `results/audits/srnet-probe-6000-crop-balanced/summary.json` for itself, so `git pull` refused to overwrite an untracked file and aborted. Second, the tracked class maps under `data/metadata/` came from `class_maps.py`, which the repository no longer contains; the current `class_mapping.py` writes `mapping_config.json` instead. So the repository pinned the output of superseded code, which is the opposite of the consistency the tracking was meant to give. Andrea questioned tracking these paths on 2026-10-07 and was right.
+- **Next step:** Pull on the GPU machine, then run the four-direction experiment.
+- **Related files/results:** `.gitignore`, `evidence/README.md`.
+
+## 2026-10-10 — Field-of-view confound found, mixed-domain control implemented
+
+- **Goal:** Answer Andrea's question about why the stego images look cropped, and act on a second opinion from Codex.
+- **Work completed:** Measured the field of view that a native crop keeps for each domain. Recorded three decisions on preprocessing and the mixed-domain control. Added `select_training_records` to `src/steganalysis/srnet.py` and extended the protocol from four directions to six.
+- **Commands or experiment configuration:** A one-epoch `experiments` run on the 198-cover S-UNIWARD cohort, to exercise all six directions.
+- **Result:** 117 tests passed. The run trained three detectors and wrote six prediction files, six direction summaries and three checkpoints. Each detector trained on 66 covers, and the mixed set held 33 from each domain.
+- **Problems or surprises:** Andrea noticed that a stego image showed a dog's nose while the processed image showed the whole dog. That is not a defect. She compared the `fit` cohort with the `crop` cohort. The underlying measurement is serious: a native 256x256 crop keeps 35.0 per cent of a natural cover and 6.2 per cent of an AI cover, a ratio of 5.6. The AI covers become close-ups of texture. S-UNIWARD hides bits in complex texture, so this reaches research question 1 and not only the domain gap. I had listed generation resolution as an untested cause but never measured it. A visual check found it.
+- **Next step:** Run the same-domain directions first on the GPU machine, then the mixed-domain control, then cross-domain.
+- **Related files/results:** `src/steganalysis/srnet.py`, `tests/steganalysis/test_mixed_domain.py`, `notes/Decisions.md`.
+
+## 2026-10-10 — Detection-error metrics and paired generalization gaps
+
+- **Goal:** Add the metrics the steganalysis literature reports, and measure domain generalization with a paired statistic.
+- **Work completed:** Added specificity, false positive rate, false negative rate, detection error `P_E`, Matthews correlation coefficient and equal error rate to `src/evaluation/metrics.py`. Added `generalization_gaps`, which differences `real_to_real` against `real_to_ai` and `ai_to_ai` against `ai_to_real` inside each seed. The W&B evaluation table and the flattened scalars carry all of it.
+- **Commands or experiment configuration:** Unit tests, CLI help on five entry points, and a synthetic two-seed protocol built in memory. No SRNet weights, no dataset, no GPU and no training run, as instructed.
+- **Result:** 149 tests passed, up from 117. The synthetic check produced a paired balanced-accuracy gap of +0.2925 with a standard deviation of 0.0075, and the matching detection-error gap of -0.2925, which confirms the sign convention. The W&B table holds 19 columns, and the flattened scalars hold 54 gap keys.
+- **Problems or surprises:** Three faults appeared during the work. `accuracy_score` raises on an empty input, so `calculate_metrics` now returns an all-null result instead of reaching sklearn. `summarize_directions` assumed every required metric was present in every run and raised a `KeyError` otherwise, so it now skips an absent metric. My own first test compared floats with exact equality.
+- **Next step:** Andrea merges the branch and pulls it onto the experiment host.
+- **Related files/results:** `src/evaluation/metrics.py`, `src/tracking/wandb.py`, `tests/evaluation/`.
+
+## 2026-10-12 to 2026-10-14 — Stage 1 returned chance, and the learning rate was the cause
+
+- **Goal:** Run the first real experiment, then find out why it returned nothing.
+- **Work completed:** Ran stage 1 of the six-direction protocol. Diagnosed the null result over five checks. Fixed two deviations from the SRNet reference: the training batches now hold each cover with its own stego, and the initialization now matches the reference. Moved every diagnostic into `src/steganalysis/diagnostics.py` as a command, after Andrea asked for them documented rather than pasted into a terminal. Added the GPU driver to run provenance. Wrote section 6 of [[Methods and Findings]].
+- **Commands or experiment configuration:** Stage 1 at `--directions real_to_real real_to_ai --seeds 1 2 3 --epochs 30 --batch-size 32`, learning rate 1e-3. A paired pilot at 150 epochs on one seed. A 200-step probe at learning rates 1e-3, 1e-4 and 1e-5. The classical check with and without `--synthetic`. The `synthetic-train` control at 60 epochs and learning rate 1e-4.
+- **Result:** Stage 1 gave accuracy exactly 0.5000 in both directions and all three seeds, with the same row twice in the confusion matrix. The paired pilot held a train loss of 0.693147 for 150 epochs, which is ln(2). The classical check found the real embedding at ROC-AUC 0.5578, z = 2.45, and its synthetic control at 0.9522, z = 19.17. The `synthetic-train` control reached balanced accuracy 0.8917 in 4,500 steps at learning rate 1e-4. The test suite grew from 149 to 190.
+- **Problems or surprises:** The cause was the learning rate. At 1e-3 the detector lowers its loss by answering the same thing for every image. A cover and its stego then agree, and the accuracy is exactly 0.5 by construction. The probe showed the embedding-driven part of the output staying flat at 1e-3 and rising four to five times at 1e-4, for both initializations. Four of my own faults belong here. Two diagnostics used 375 and 1,250 optimizer steps, which cannot decide anything. The second one sent the work toward the initialization, which was not the cause. The first classical measurement ran with no control of its own and nearly condemned the data. I raised a GPU driver mismatch as a candidate on a timing correlation, and the control disproved it four days later. A driver upgrade on 2026-10-10 did leave the machine with mismatched versions, which broke `nvidia-smi` but not CUDA arithmetic.
+- **Next step:** Repeat stage 1 for `real_to_real` with one seed and learning rate 1e-4, as a pilot. Nothing else changes. If the loss moves below ln(2), run the three stages.
+- **Related files/results:** `src/steganalysis/diagnostics.py`, `src/steganalysis/srnet.py`, `notes/Methods and Findings.md` section 6, `results/diagnostics/` on the GPU machine.
+
+## 2026-10-14 — First working detector, and a complete cross-domain failure
+
+- **Goal:** Repeat the failed pilot with one change, the learning rate, and find out whether S-UNIWARD at 0.4 bpp is detectable at all.
+- **Work completed:** Ran the pilot. Added a derived naming convention for tracked runs, and ended each name with the timestamp of its results folder. Wrote section 7 of [[Methods and Findings]] and the epoch decision.
+- **Commands or experiment configuration:** `--directions real_to_real real_to_ai --seeds 1 --epochs 150 --batch-size 32 --learning-rate 1e-4`, with W&B online. The run is `o3quu45i`, from repository commit `8b14ca35` with a clean tree.
+- **Result:** `real_to_real` reached 0.7228 balanced accuracy, 0.8323 ROC-AUC and a detection error of 0.2772. `real_to_ai` returned 0.5000 balanced accuracy, 0.4970 ROC-AUC and MCC of 0.0, and it called 95 per cent of AI images stego. The paired gap in balanced accuracy is +0.2228 and in ROC-AUC is +0.3352. The run took 6,670 seconds.
+- **Problems or surprises:** Two features of the learning curve matter more than the final number. The train loss held ln(2) for 17 epochs before the network escaped, and at learning rate 1e-3 it never escaped at all in 36,450 steps. The selected checkpoint is epoch 148 of 150, and the validation curve was still rising, so 0.7228 is a lower bound. The cross-domain column holds two separate failures. The threshold fails, because the detector calls almost every AI cover stego. The ranking fails as well, because the area under the curve is 0.4970, so recalibration repairs nothing.
+- **Next step:** Run the stages at 300 epochs with three seeds. Stage 3, the mixed-domain control, is now required and not optional. The pilot cannot say whether the traces differ or the AI covers are out of distribution.
+- **Related files/results:** `notes/Methods and Findings.md` section 7, W&B run `o3quu45i`, `results/srnet_20261014_130157/`.
+
+## 2026-10-15 to 2026-10-19 — All six directions, and the mixed control decides research question 2
+
+- **Goal:** Run the protocol at 300 epochs and learning rate 1e-4, one domain at a time. Find out whether the results hold together well enough to continue.
+- **Work completed:** Trained four detectors: natural covers at seeds 1 and 2, AI covers at seed 1, and the mixed control at seed 1. Each gives two evaluation directions, so all six directions now have a measurement. Wrote section 8 of [[Methods and Findings]] and two decisions. Moved the final metrics in W&B from the run history to the run summary, which cut a single-seed run from 137 panels to 8.
+- **Commands or experiment configuration:** `--epochs 300 --batch-size 32 --learning-rate 1e-4`, one `--seeds` value for each command, on manifest `f271f135` from repository commit `d5168c07`. Each run took about 3.7 hours.
+- **Result:** `real_to_real` reached 0.7608 balanced accuracy and 0.8780 area under the curve. `ai_to_ai` reached 0.6242 and 0.7034. Both transfers fell to chance: `real_to_ai` at 0.5077 and `ai_to_real` at 0.5072. The mixed detector worked in both domains, at 0.6427 on natural covers and 0.6304 on AI covers. Natural covers at two seeds agreed to 0.0005 in balanced accuracy.
+- **Problems or surprises:** The mixed control answered the question it was built for. The embedding traces are not incompatible between the domains, because one detector that sees both finds the embedding in both. The cross-domain collapse is distribution shift. The two transfer failures are mirror images. The natural detector calls 93 per cent of AI images stego. The AI detector calls 74 per cent of natural images clean. The escape-epoch risk from section 7.8 did not occur, because AI left the plateau first at epoch 7. Every detector is still undertrained, with its selected checkpoint near the end of the budget, so every value is a lower bound.
+- **Next step:** Finish the second seed for AI and for mixed. Then read the spread in each domain, and decide the seed count from it. Build the cross-seed aggregator, because each run folder holds one seed and every standard deviation in every summary is 0.0.
+- **Related files/results:** `notes/Methods and Findings.md` section 8, `results/srnet_20261015_112246`, `srnet_20261015_182123`, `srnet_20261016_173640`, `srnet_20261017_121320`.
+
+## 2026-10-21 — The complete protocol, and a silent logging fault
+
+- **Goal:** Finish the nine runs, aggregate them, and produce numbers the thesis can quote.
+- **Work completed:** Ran the third seed for each domain. Built `python -m src.evaluation.protocol`, which groups runs by condition, merges them by seed and writes the cross-seed summary. Added `mixed_to_real_minus_mixed_to_ai` to the gap pairs, and gave every pair a kind. Fixed a logging fault. Wrote section 10 of [[Methods and Findings]].
+- **Commands or experiment configuration:** Three runs at `--epochs 300 --batch-size 32 --learning-rate 1e-4`, one seed each. Then the aggregator across all run folders.
+- **Result:** The protocol gives `real_to_real` 0.7680, `mixed_to_real` 0.6448, `ai_to_ai` 0.6343, `mixed_to_ai` 0.6302, `ai_to_real` 0.5142 and `real_to_ai` 0.5067 in balanced accuracy, each over three seeds. The transfer gaps are +0.2613 and +0.1201. The mixed gap is +0.0145 with a spread of 0.0028.
+- **Problems or surprises:** Two findings came out of the day. The mixed gap says a detector with no training advantage finds AI covers approximately 1.5 points harder, against the 13.4 points of the same-domain comparison. The two differ by a factor of ten, and section 9.5 names the experiment that separates them. The second finding is a fault. A module started with `python -m` has `__name__` set to `"__main__"`, so its logger sat outside the project namespace. Every INFO line disappeared. Warnings still appeared, which made the loss silent. Eight modules held the pattern. The experiment runner has therefore never printed its cross-domain summary table.
+- **Next step:** Decide whether the reported spread uses `ddof=0` or `ddof=1`, because it changes every figure in the thesis. Run the 1,944-pair experiment, which costs 7.4 hours and separates the two readings of research question 1.
+- **Related files/results:** `notes/Methods and Findings.md` section 10, `src/evaluation/protocol.py`, `results/protocol/protocol_20261021_142823.json`.

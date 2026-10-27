@@ -29,12 +29,53 @@ Use each command's `--help` output or its parser implementation as the authority
 The documented full test command is:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 ```
+
+The `-t .` flag sets the top-level directory to the repository root. Without
+it, discovery puts `tests/` itself on `sys.path` and `tests/datasets/`
+shadows the installed `datasets` library, which breaks the Hugging Face
+acquisition imports.
 
 Some tests are conditionally skipped when optional SRNet or OpenStego dependencies are absent. Report skips separately from passes and failures.
 
 For a focused change, run the smallest relevant test first. Run the full suite when the change crosses modules, affects manifests or experiment validity, changes a public command, or is otherwise high risk.
+
+## Logging
+
+`src/logging_config.py` holds the shared configuration. Each entry point calls
+`configure_logging()` once, before any work. Each module calls
+`get_logger(__name__)`. Do not add `print()` calls to `src/` outside
+`src/legacy/`.
+
+Two environment variables control the output:
+
+| Variable | Effect |
+|---|---|
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. Default `INFO`. |
+| `LOG_COLOR` | A name from `LOG_COLORS`. Default `cyan`. |
+| `NO_COLOR` | Any value turns color off. |
+
+Log records go to standard error, so standard output stays free for data.
+
+Color is written only when the stream is a terminal. Runs start from agent
+sessions and through `subprocess`, and both capture the output. `success_line`
+and `error_line` embed color in the message, so they check this separately
+through `color_enabled()`.
+
+`ProgressReporter` reports progress inside a long loop. Use it for any loop over
+more than a few hundred items. It reports at an interval that it derives from
+the total, which gives about twenty lines for any run size. It does not use a
+progress bar, because a bar writes one line for each redraw and fills a
+captured log.
+
+```python
+progress = ProgressReporter(LOGGER, total=len(records), label="embed")
+for record in records:
+    ...
+    progress.advance()
+progress.finish()
+```
 
 ## Code organization
 

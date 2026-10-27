@@ -251,6 +251,7 @@ Use offline or disabled mode for local tests, then explicitly sync approved runs
 
 ## Related notes
 
+- [[Methods and Findings]] — consolidated evidence and threats to validity for thesis writing.
 - [[Project Overview]] — short orientation.
 - [[Architecture]] — component boundaries and data flow.
 - [[Decisions]] — accepted choices; the authority for protocol decisions.

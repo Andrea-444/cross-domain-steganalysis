@@ -1,7 +1,7 @@
 ---
 type: task-list
 status: active
-updated: 2026-09-01
+updated: 2026-10-10
 ---
 
 # Tasks
@@ -32,12 +32,12 @@ updated: 2026-09-01
 ## Local experiment pipeline
 
 - [ ] Create one frozen experiment configuration that covers dataset, embedding, training, evaluation, and tracking settings.
-- [ ] Save structured epoch history instead of only printing training/validation loss.
-- [ ] Add validation accuracy and any accepted validation metrics.
-- [ ] Save the selected best checkpoint and selection metadata.
-- [ ] Preserve per-seed metrics rather than writing only aggregate summaries.
-- [ ] Preserve `image_id`, labels, predictions, and probabilities for every test direction.
-- [ ] Add accepted probability-based metrics and plots, such as ROC-AUC and PR-AUC, only after verifying score semantics.
+- [x] Save structured epoch history instead of only printing training/validation loss.
+- [x] Add validation accuracy and any accepted validation metrics.
+- [x] Save the selected best checkpoint and selection metadata.
+- [x] Preserve per-seed metrics rather than writing only aggregate summaries.
+- [x] Preserve `image_id`, labels, predictions, and probabilities for every test direction.
+- [x] Add accepted probability-based metrics and plots, such as ROC-AUC and PR-AUC, only after verifying score semantics. Score semantics verified: the reference model ends in `LogSoftmax`. Plots remain open.
 - [ ] Record full provenance: manifest hash, dataset counts, embedding condition, detector commit, repository state, dependencies, hardware, timing, and exit status.
 - [ ] Define stable run IDs and safe resume/idempotency behavior for interrupted multi-seed experiments.
 - [ ] Document the final experiment configuration and compute requirements.
@@ -68,6 +68,14 @@ updated: 2026-09-01
 - [ ] Document setup, login, offline sync, dashboard use, and recovery from interrupted runs in `README.md`.
 - [ ] Consider W&B Sweeps only after a single tracked run and the frozen protocol are validated.
 
+## Accepted experiment plan (2026-10-10)
+
+- [ ] 1. Same-domain: `real_to_real` and `ai_to_ai` on the crop cohort.
+- [ ] 2. Mixed-domain control: `mixed_to_real` and `mixed_to_ai`, with the mixed training set the same size as each single-domain set.
+- [ ] 3. Cross-domain: `real_to_ai` and `ai_to_real`, interpreted against the mixed result.
+- [ ] 4. Repeat 1 to 3 with `fit` preprocessing as a sensitivity test.
+- [ ] 5. Optional last pilot: reduce AI covers to natural-image size, approximately 500 covers per domain.
+
 ## Preflight and analysis
 
 - [ ] Define an end-to-end smoke test with a very small balanced dataset.
@@ -83,7 +91,7 @@ updated: 2026-09-01
 - [ ] Record failed and repeated runs explicitly; do not overwrite or silently omit them.
 - [ ] Aggregate repeated seeds and calculate the accepted uncertainty/statistical comparisons.
 - [ ] Review failure cases by domain, direction, embedding method, and payload.
-- [ ] Record threats to validity and known confounders.
+- [x] Record threats to validity and known confounders. Recorded in [[Methods and Findings]]; four candidate causes of the residual domain separability remain unexcluded.
 - [ ] Make final experiments reproducible from documented commands or configuration.
 - [ ] Generate final tables and figures from preserved machine-readable results.
 - [ ] Archive final manifests, configurations, metrics, and environment information.
@@ -96,5 +104,6 @@ updated: 2026-09-01
 
 - [x] Create the initial Obsidian-compatible project note structure.
 - [x] Implement the current dataset → embedding → SRNet → four-direction evaluation skeleton.
+- [x] Implement immutable dataset indexes, deterministic class-matched selection, and incremental audit/pilot/full extraction.
 - [x] Run the repository unit test suite successfully on 2026-08-31 (8 tests; development verification only).
 - [x] Create the central pipeline and experiment-planning summary.

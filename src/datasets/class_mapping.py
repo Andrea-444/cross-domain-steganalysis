@@ -1,0 +1,293 @@
+"""Exact ImageNet synset mapping for ImageNet and GenImage++ candidates."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections import Counter
+from pathlib import Path, PurePosixPath
+
+from src.datasets.index import IMAGE_EXTENSIONS, list_source_members
+from src.datasets.manifest import write_manifest
+
+
+def build_genimagepp_class_maps(
+    real_source: str | Path,
+    ai_source: str | Path,
+    imagenet_labels: str | Path,
+    simple_labels: str | Path,
+    class_index: str | Path,
+    output: str | Path,
+    indexed_prompts: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Join both domains to synsets by their official ordered class metadata."""
+    real_source = Path(real_source).resolve()
+    ai_source = Path(ai_source).resolve()
+    imagenet_labels = Path(imagenet_labels).resolve()
+    simple_labels = Path(simple_labels).resolve()
+    class_index = Path(class_index).resolve()
+    indexed_prompts_path = (
+        Path(indexed_prompts).resolve() if indexed_prompts is not None else None
+    )
+    output = Path(output)
+    real_output = output / "imagenet-real-class-map.jsonl"
+    ai_output = output / "genimagepp-ai-class-map.jsonl"
+    config_output = output / "mapping_config.json"
+    existing = [path for path in (real_output, ai_output, config_output) if path.exists()]
+    if existing:
+        raise FileExistsError(
+            "Class-map output already exists; validate it instead of overwriting: "
+            + ", ".join(str(path) for path in existing)
+        )
+
+    hf_labels = _load_hf_labels(imagenet_labels)
+    simple = _load_string_list(simple_labels, "simple labels")
+    prompts = (
+        _load_string_list(indexed_prompts_path, "indexed prompts")
+        if indexed_prompts_path is not None
+        else None
+    )
+    raw_class_index = json.loads(class_index.read_text(encoding="utf-8"))
+    if len(hf_labels) != 1000 or len(simple) != 1000 or len(raw_class_index) != 1000:
+        raise ValueError(
+            "Expected exactly 1,000 entries in every ImageNet metadata source."
+        )
+    if len(set(hf_labels)) != 1000 or len(set(simple)) != 1000:
+        raise ValueError("ImageNet label metadata contains duplicate class names.")
+
+    synsets: list[str] = []
+    for index in range(1000):
+        entry = raw_class_index.get(str(index))
+        if not isinstance(entry, list) or len(entry) < 2:
+            raise ValueError(f"Invalid ImageNet class-index entry {index}: {entry!r}")
+        synsets.append(str(entry[0]))
+    if len(set(synsets)) != 1000:
+        raise ValueError("ImageNet class-index metadata contains duplicate synsets.")
+
+    hf_to_index = {label: index for index, label in enumerate(hf_labels)}
+    simple_to_index = {label: index for index, label in enumerate(simple)}
+    real_kind, real_members = list_source_members(real_source)
+    ai_kind, ai_members = list_source_members(ai_source)
+    if real_kind != "directory":
+        raise ValueError("ImageNet real source must be a directory.")
+    if ai_kind not in {"tar-zstd", "tar", "zip"}:
+        raise ValueError("GenImage++ AI source must be an archive.")
+
+    real_records: list[dict[str, object]] = []
+    for member, _ in real_members:
+        source_label = PurePosixPath(member).parent.name
+        if source_label not in hf_to_index:
+            raise ValueError(f"Unknown ImageNet source label: {source_label!r}")
+        label_index = hf_to_index[source_label]
+        real_records.append(
+            {
+                "source_member": member,
+                "class_id": synsets[label_index],
+                "label_index": label_index,
+                "source_label": source_label,
+            }
+        )
+
+    ai_image_members = [
+        member
+        for member, _ in ai_members
+        if PurePosixPath(member).suffix.lower() in IMAGE_EXTENSIONS
+        and "1_fake" in PurePosixPath(member).parts
+    ]
+    numeric_stems = [
+        PurePosixPath(member).stem
+        for member in ai_image_members
+        if PurePosixPath(member).stem.isdigit()
+    ]
+    numeric_filename_base: int | None = None
+    if numeric_stems:
+        if len(numeric_stems) != len(ai_image_members):
+            raise ValueError(
+                "GenImage++ archive mixes numeric prompt-index filenames with "
+                "class-label filenames."
+            )
+        if prompts is None:
+            raise ValueError(
+                "Numeric GenImage++ filenames require --indexed-prompts with the "
+                "official prompt list."
+            )
+        expected_prompt_count = len(simple) * 6
+        if len(prompts) != expected_prompt_count:
+            raise ValueError(
+                f"Expected {expected_prompt_count} indexed prompts; "
+                f"found {len(prompts)}."
+            )
+        numeric_filename_base = _numeric_filename_base(
+            numeric_stems, prompt_count=len(prompts)
+        )
+
+    ai_records: list[dict[str, object]] = []
+    numeric_prompt_indices: list[int] = []
+    for member in ai_image_members:
+        path = PurePosixPath(member)
+        stem = path.stem
+        record: dict[str, object]
+        if stem.isdigit():
+            prompt_index, label_index = _numeric_prompt_mapping(
+                stem,
+                prompts=prompts,
+                class_count=len(simple),
+                filename_base=numeric_filename_base or 0,
+            )
+            numeric_prompt_indices.append(prompt_index)
+            record = {
+                "source_member": member,
+                "class_id": synsets[label_index],
+                "label_index": label_index,
+                "source_label": simple[label_index],
+                "prompt_index": prompt_index,
+            }
+        else:
+            source_label, separator, image_number = stem.rpartition("_")
+            if not separator or not image_number.isdigit():
+                raise ValueError(f"Invalid GenImage++ filename: {member}")
+            if source_label not in simple_to_index:
+                raise ValueError(f"Unknown GenImage++ class label: {source_label!r}")
+            label_index = simple_to_index[source_label]
+            record = {
+                "source_member": member,
+                "class_id": synsets[label_index],
+                "label_index": label_index,
+                "source_label": source_label,
+            }
+        ai_records.append(record)
+
+    if numeric_prompt_indices:
+        expected_indices = list(range(len(prompts or [])))
+        if sorted(numeric_prompt_indices) != expected_indices:
+            raise ValueError(
+                "Numeric GenImage++ filenames must contain every official prompt "
+                "index exactly once."
+            )
+
+    _validate_maps(real_records, ai_records)
+    real_records.sort(key=lambda record: str(record["source_member"]))
+    ai_records.sort(key=lambda record: str(record["source_member"]))
+    write_manifest(real_output, real_records)
+    write_manifest(ai_output, ai_records)
+    config_output.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mapping_method": (
+                    "numeric filename -> official prompt index -> six prompts per "
+                    "ImageNet class"
+                    if numeric_prompt_indices
+                    else "ordered ImageNet class index; exact label equality"
+                ),
+                "fuzzy_matching": False,
+                "real_source": str(real_source),
+                "ai_source": str(ai_source),
+                "imagenet_labels": str(imagenet_labels),
+                "imagenet_labels_sha256": _sha256(imagenet_labels),
+                "simple_labels": str(simple_labels),
+                "simple_labels_sha256": _sha256(simple_labels),
+                "class_index": str(class_index),
+                "class_index_sha256": _sha256(class_index),
+                "indexed_prompts": (
+                    str(indexed_prompts_path) if indexed_prompts_path else None
+                ),
+                "indexed_prompts_sha256": (
+                    _sha256(indexed_prompts_path) if indexed_prompts_path else None
+                ),
+                "numeric_filename_base": numeric_filename_base,
+                "records_per_domain": 6000,
+                "class_count": 1000,
+                "records_per_class": 6,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return real_output, ai_output
+
+
+def _numeric_prompt_mapping(
+    stem: str,
+    prompts: list[str] | None,
+    class_count: int,
+    records_per_class: int = 6,
+    filename_base: int = 0,
+) -> tuple[int, int]:
+    if prompts is None:
+        raise ValueError(
+            "Numeric GenImage++ filenames require --indexed-prompts with the "
+            "official prompt list."
+        )
+    expected_prompt_count = class_count * records_per_class
+    if len(prompts) != expected_prompt_count:
+        raise ValueError(
+            f"Expected {expected_prompt_count} indexed prompts; found {len(prompts)}."
+        )
+    if filename_base not in {0, 1}:
+        raise ValueError("Numeric filename base must be zero or one.")
+    prompt_index = int(stem) - filename_base
+    if not 0 <= prompt_index < len(prompts):
+        raise ValueError(f"Prompt index is outside the official list: {prompt_index}")
+    return prompt_index, prompt_index // records_per_class
+
+
+def _numeric_filename_base(stems: list[str], prompt_count: int) -> int:
+    values = sorted(int(stem) for stem in stems)
+    if values == list(range(prompt_count)):
+        return 0
+    if values == list(range(1, prompt_count + 1)):
+        return 1
+    raise ValueError(
+        "Numeric GenImage++ filenames must contain either 0 through N-1 or "
+        "1 through N exactly once."
+    )
+
+
+def _load_hf_labels(path: Path) -> list[str]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(value, dict):
+        value = value.get("labels")
+    return _validate_string_list(value, "Hugging Face labels")
+
+
+def _load_string_list(path: Path, description: str) -> list[str]:
+    return _validate_string_list(
+        json.loads(path.read_text(encoding="utf-8")), description
+    )
+
+
+def _validate_string_list(value: object, description: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{description} must be a JSON list of strings.")
+    return [str(item) for item in value]
+
+
+def _validate_maps(
+    real_records: list[dict[str, object]], ai_records: list[dict[str, object]]
+) -> None:
+    if len(real_records) != 6000 or len(ai_records) != 6000:
+        raise ValueError(
+            f"Expected 6,000 records per domain; found real={len(real_records)}, "
+            f"ai={len(ai_records)}."
+        )
+    distributions = {
+        "real": Counter(str(record["class_id"]) for record in real_records),
+        "ai": Counter(str(record["class_id"]) for record in ai_records),
+    }
+    for domain, counts in distributions.items():
+        if len(counts) != 1000 or set(counts.values()) != {6}:
+            raise ValueError(
+                f"Expected 1,000 {domain} classes with six records each."
+            )
+    if distributions["real"] != distributions["ai"]:
+        raise ValueError("Natural and AI class distributions do not match.")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

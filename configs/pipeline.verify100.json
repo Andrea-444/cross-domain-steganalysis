@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "run": {
+    "name": "verify100-suniward-p040",
+    "phase": "smoke",
+    "output": "results/pipeline"
+  },
+  "dataset": {
+    "clean_manifest": null,
+    "real_src": "src/raw_data/real",
+    "ai_src": "src/raw_data/ai",
+    "name": "verify100",
+    "source": "local-kaggle",
+    "output": "data/processed",
+    "size": 256,
+    "seed": 42,
+    "limit_per_domain": 100
+  },
+  "steganography": {
+    "stego_manifest": null,
+    "algorithm": "suniward",
+    "payload_bpp": 0.4,
+    "seed": 42,
+    "backend": "conseal",
+    "output": "data/stego/runs",
+    "cache_dir": "data/stego/cache",
+    "limit_per_domain": 100
+  },
+  "detector": {
+    "enabled": true,
+    "detector": "srnet",
+    "seeds": [1],
+    "epochs": 15,
+    "batch_size": 16,
+    "learning_rate": 0.001,
+    "device": null,
+    "reference_root": "external/srnet-reference",
+    "output": "results"
+  },
+  "tracking": {
+    "enabled": false,
+    "mode": "disabled",
+    "project": "stego-cross-domain",
+    "entity": null,
+    "upload_pipeline_artifact": false
+  }
+}
