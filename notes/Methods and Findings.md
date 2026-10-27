@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-26
+updated: 2026-10-27
 audience: thesis-writing
 ---
 
@@ -1155,6 +1155,65 @@ fixed. The full-union run performs about 145,800 updates, compared with about
 more optimization steps. It cannot be attributed to data volume alone without
 a step-matched control.
 
+The selected checkpoint was then evaluated without retraining on the two
+prepared external AI-cover sets:
+
+| Mixed seed-1 condition | Base FLUX BA / AUC | Realistic FLUX BA / AUC | SD3 BA / AUC |
+|---|---:|---:|---:|
+| Equal-total, 300 epochs | 0.6304 / 0.7192 | 0.7070 / 0.8119 | 0.5905 / 0.6648 |
+| Equal-total, 500 epochs | 0.6371 / 0.7260 | 0.7075 / 0.8141 | 0.5585 / 0.6247 |
+| Full union, 300 epochs | **0.6555 / 0.7520** | **0.7350 / 0.8412** | 0.5880 / **0.6841** |
+
+**External-evaluation observation.** Against the equal-total 300-epoch seed-1
+checkpoint, the full-union checkpoint gains 0.0280 balanced accuracy and
+0.0293 ROC-AUC on realistic-prompt FLUX. On SD3, balanced accuracy decreases
+by 0.0025 while ROC-AUC gains 0.0193. The SD3 checkpoint has 0.849 specificity
+but only 0.327 stego recall.
+
+**External-evaluation interpretation.** The larger recipe improves transfer
+within the FLUX generator family, but it does not remove the shift to SD3. The
+higher SD3 ROC-AUC with nearly unchanged balanced accuracy suggests that the
+fixed threshold is part of the error pattern. It must not be retuned on the
+test set; a threshold-calibration study would need a separate validation set.
+
 Detailed review:
 [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]]. W&B run:
-`hgsctm2p`. Result folder: `results/srnet_20261025_145314`.
+`hgsctm2p`. Training result folder: `results/srnet_20261025_145314`.
+External result folders:
+`results/srnet_eval_genimagepp-sd3-full-union-suniward040_20261026_154127`
+and
+`results/srnet_eval_genimagepp-flux-realistic-full-union-suniward040_20261026_154150`.
+
+## 15. Lower-payload sensitivity: natural seed 1 at 0.2 bpp
+
+The first S-UNIWARD 0.2 bpp detector was trained on natural covers with seed 1
+for 300 epochs. The clean covers, splits, preprocessing, detector, seed and
+training settings match the 0.4 bpp natural seed-1 condition. The payload is
+the intended change.
+
+| Direction and metric | 0.4 bpp | 0.2 bpp | Change |
+|---|---:|---:|---:|
+| `real_to_real` balanced accuracy | 0.7608 | **0.5965** | -0.1643 |
+| `real_to_real` ROC-AUC | 0.8780 | **0.6600** | -0.2180 |
+| `real_to_ai` balanced accuracy | 0.5077 | 0.5015 | -0.0062 |
+| `real_to_ai` ROC-AUC | 0.5288 | 0.5065 | -0.0223 |
+
+**Observation.** Halving the payload reduces natural same-domain balanced
+accuracy by 16.43 percentage points and ROC-AUC by 21.80 points. The natural
+detector still learns an above-chance signal at 0.2 bpp, while natural-to-AI
+transfer remains at chance.
+
+**Interpretation.** Lower payload makes the embedding harder to detect, as
+expected. It does not improve cross-domain transfer. The smaller domain gap at
+0.2 bpp comes from weaker same-domain detection, not stronger AI-domain
+generalization.
+
+The training curve is also slower. Training loss first falls below 0.69 at
+epoch 119, and the selected checkpoint is epoch 286 of 300 at validation loss
+0.6756. This one-seed value remains a lower-bound sensitivity result. The
+AI-trained and mixed-domain 0.2 bpp stages are needed before comparing cover
+domains under the lower payload.
+
+Detailed review:
+[[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
+`jto6cuff`. Result folder: `results/srnet_20261026_160301`.

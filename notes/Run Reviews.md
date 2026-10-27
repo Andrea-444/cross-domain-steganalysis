@@ -1,7 +1,7 @@
 ---
 type: run-review-log
 status: complete
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Run Reviews
@@ -27,3 +27,4 @@ for cross-seed conclusions.
 | 12 | external SD3 checkpoint evaluation | 1-3 | saved checkpoints | [[run-reviews/Run 12 - SD3 external checkpoint evaluation]] |
 | 13 | realistic-prompt FLUX checkpoint evaluation | 1-3 | saved checkpoints | [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]] |
 | 14 | full-union mixed natural and AI-generated covers | 1 | 300 epochs | [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]] |
+| 15 | natural covers, S-UNIWARD 0.2 bpp | 1 | 300 epochs | [[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]] |

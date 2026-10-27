@@ -2,7 +2,7 @@
 type: run-review
 run: 12
 status: reviewed
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Run 12 — External evaluation on Stable Diffusion 3 covers
@@ -95,7 +95,7 @@ Longer training may have specialized that model more strongly to its original
 training distributions. One seed is not enough to treat this explanation as a
 finding.
 
-## Interpretation and next step
+## Interpretation and completed follow-up
 
 This is evidence that the original AI-cover result is partly
 generator-specific. It strengthens the paper by adding an external-generator
@@ -104,9 +104,14 @@ on SD3.
 
 It does **not** show that embedding is intrinsically harder in SD3. No detector
 was trained on SD3, so lower performance can be ordinary cover-distribution
-shift. The next immediate measurement is the full-union mixed checkpoint on
-the same SD3 test set once its training run finishes. That changes training
-data quantity while leaving this external test fixed.
+shift.
+
+The planned full-union follow-up is now complete. Its seed-1 checkpoint scores
+0.5880 balanced accuracy and 0.6841 ROC-AUC on this SD3 set. Against the
+equal-total 300-epoch seed-1 checkpoint, balanced accuracy changes by -0.0025
+and ROC-AUC by +0.0193. More mixed training exposure improves ranking but does
+not remove the SD3 generator gap. See
+[[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]].
 
 ## Limitations and status
 
