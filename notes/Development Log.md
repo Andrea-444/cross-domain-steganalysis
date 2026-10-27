@@ -1,7 +1,7 @@
 ---
 type: development-log
 status: active
-updated: 2026-10-14
+updated: 2026-10-27
 ---
 
 # Development Log
@@ -298,3 +298,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** Two findings came out of the day. The mixed gap says a detector with no training advantage finds AI covers approximately 1.5 points harder, against the 13.4 points of the same-domain comparison. The two differ by a factor of ten, and section 9.5 names the experiment that separates them. The second finding is a fault. A module started with `python -m` has `__name__` set to `"__main__"`, so its logger sat outside the project namespace. Every INFO line disappeared. Warnings still appeared, which made the loss silent. Eight modules held the pattern. The experiment runner has therefore never printed its cross-domain summary table.
 - **Next step:** Decide whether the reported spread uses `ddof=0` or `ddof=1`, because it changes every figure in the thesis. Run the 1,944-pair experiment, which costs 7.4 hours and separates the two readings of research question 1.
 - **Related files/results:** `notes/Methods and Findings.md` section 10, `src/evaluation/protocol.py`, `results/protocol/protocol_20261021_142823.json`.
+
+## 2026-10-27 — Public repository cleanup after the v1.0 snapshot
+
+- **Goal:** Make the repository easier for a supervisor or external reader to understand without changing the active experimental code.
+- **Work completed:** Replaced the 1,032-line root README with a concise overview and reproducible entry points. Added an MIT license for the original project code. Removed committed W&B runtime output, a large training log, editor state, and tool-specific skill bundles. Added ignore rules so those local files do not return. Kept `AGENTS.md` and `agent-instructions/` because they contain project-level research safeguards rather than editor-specific behavior.
+- **Commands or experiment configuration:** Repository audit only; no dataset generation, training, or evaluation was run.
+- **Result:** The cleanup changes only documentation and repository metadata. Scientific source code, tests, retained evidence, run reviews, and experiment notes remain unchanged.
+- **Problems or surprises:** The remote `dev` branch contained an accidentally committed 10,049-line training log. The removed `.claude` workflow also described an obsolete state in which `dev` and release tags did not exist.
+- **Next step:** Review the cleanup diff, merge it into `dev`, and postpone functional source reorganization until the current S-UNIWARD and MiPOD experiment conditions are complete.
+- **Related files/results:** `README.md`, `LICENSE`, `.gitignore`.
