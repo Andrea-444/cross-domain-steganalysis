@@ -1211,9 +1211,47 @@ generalization.
 The training curve is also slower. Training loss first falls below 0.69 at
 epoch 119, and the selected checkpoint is epoch 286 of 300 at validation loss
 0.6756. This one-seed value remains a lower-bound sensitivity result. The
-AI-trained and mixed-domain 0.2 bpp stages are needed before comparing cover
-domains under the lower payload.
+AI-trained stage has since completed as Run 16; the mixed-domain 0.2 bpp stage
+is still needed before the cleaner paired comparison of cover domains.
 
 Detailed review:
 [[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
 `jto6cuff`. Result folder: `results/srnet_20261026_160301`.
+
+## 16. Lower-payload sensitivity: AI seed 1 at 0.2 bpp
+
+The matching AI-domain detector was trained with the same S-UNIWARD 0.2 bpp
+manifest, seed, preprocessing, detector and 300-epoch budget as the natural
+lower-payload run. Only the training domain changes.
+
+| Direction and metric | 0.4 bpp | 0.2 bpp | Change |
+|---|---:|---:|---:|
+| `ai_to_ai` balanced accuracy | 0.6242 | **0.5067** | -0.1175 |
+| `ai_to_ai` ROC-AUC | 0.7034 | **0.5102** | -0.1932 |
+| `ai_to_real` balanced accuracy | 0.5072 | 0.5026 | -0.0046 |
+| `ai_to_real` ROC-AUC | 0.5262 | 0.5025 | -0.0237 |
+
+**Observation.** Halving the payload removes almost all useful same-domain
+discrimination for this AI-trained seed. Both `ai_to_ai` and `ai_to_real` are
+near chance in balanced accuracy, ROC-AUC and MCC. The moderate F1 values are
+not evidence of useful detection: the model predicts stego for roughly two
+thirds of the images in both test domains.
+
+**Training behavior.** Training loss falls below 0.69 at epoch 22 and reaches
+0.6289 at epoch 300, but validation loss does not improve with it. The lowest
+rounded validation loss in the supplied log is 0.6925 at epoch 15, compared
+with 0.7677 at the final epoch. The model learns some training-set signal
+without obtaining useful validation or test separation.
+
+**Natural-versus-AI lower-payload comparison.** At 0.2 bpp, the natural
+specialist reaches 0.5965 balanced accuracy and 0.6600 ROC-AUC, while the AI
+specialist reaches 0.5067 and 0.5102. The observed specialist difference is
+8.98 points in balanced accuracy and 14.98 points in ROC-AUC. This remains a
+one-seed comparison that changes both training and test domain. The mixed
+detector is required to keep the trained model fixed while changing only the
+test domain.
+
+Detailed review:
+[[run-reviews/Run 16 - AI seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
+`ittjl1x0`. The local result-folder path was not present in the supplied W&B
+downloads and remains to be recovered from the GPU host.

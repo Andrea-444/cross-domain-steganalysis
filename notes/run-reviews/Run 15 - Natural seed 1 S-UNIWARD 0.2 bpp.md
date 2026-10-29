@@ -85,8 +85,9 @@ while the AI-domain result stayed near chance.
 - The model learned slowly: training loss remained near chance for roughly the
   first 118 epochs. Equal nominal epoch budgets therefore contain fewer useful
   learning epochs at 0.2 bpp than at 0.4 bpp.
-- The AI-trained and mixed-domain 0.2 bpp runs are still required before this
-  payload can answer the project's domain-difficulty questions.
+- The AI-trained 0.2 bpp stage has since completed as Run 16. The mixed-domain
+  stage is still required before this payload can support the cleaner paired
+  domain comparison.
 - No significance claim is made from one seed.
 
 ## Evidence used
