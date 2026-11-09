@@ -11,6 +11,29 @@ from which the final figures must be rendered.
 The target task is binary steganalysis (clean versus stego). Natural and
 AI-generated images are cover domains, not detector labels.
 
+## Revision requested after visual review
+
+Use the completed export under `results/thesis_figures_20261109_175144` as the
+verified source revision. Preserve all plotted values, aggregation rules,
+direction ordering, axes, uncertainty treatment, colors, and provenance.
+
+Apply only these presentation changes:
+
+- In F01 and F02, draw every seed curve with a thin solid line
+  (`linewidth=1.0`). Do not use dashed or dotted curves. Keep the existing seed
+  colors and distinguish the seeds through color and the legend. Retain the
+  hollow selected-checkpoint markers, but do not add markers throughout the
+  epoch curves.
+- Remove the large figure-level title and subtitle from F01--F08. The LaTeX
+  caption will provide the figure title and methodological explanation.
+- Retain useful panel headings such as `Natural-domain training`, `Balanced
+  accuracy`, and `ROC-AUC`, but render them in normal rather than bold weight.
+- Keep all graph text in English.
+- Do not change the numerical data or reinterpret any result while restyling.
+- Export the revision to a new timestamped directory and regenerate the PNG,
+  vector PDF, CSV, manifest, provenance, and validation records. Do not
+  overwrite the verified original export.
+
 ## Non-negotiable rules
 
 - Do not rerun training, embedding, preprocessing, or checkpoint evaluation.
@@ -165,11 +188,19 @@ Requirements:
 - mark the selected checkpoint epoch subtly if the exact selection metadata is
   available for every plotted run; otherwise omit checkpoint markers entirely.
 
+**What it shows.** Validation loss over 300 epochs for the natural-, AI-, and
+mixed-domain models across three seeds. It is a training diagnostic and does
+not by itself measure cross-domain generalization.
+
 ### F02 — Primary validation balanced accuracy
 
 Use the same three-subplot layout as F01, with validation balanced accuracy on
 the y-axis. Include a horizontal chance reference at 0.5. Do not describe this
 training-time validation measure as the final test result.
+
+**What it shows.** The development of validation balanced accuracy in the nine
+primary runs. It makes differences in within-domain learning difficulty
+visible, but it is not a substitute for final test evaluation.
 
 ### F03 — Primary six-direction balanced accuracy
 
@@ -187,11 +218,19 @@ deviation error bars. Prefer a point-range plot over a dense bar chart. Include
 a horizontal reference at 0.5. Do not collapse the six directions into one
 headline value.
 
+**What it shows.** Final test balanced accuracy for same-domain,
+cross-domain, and mixed-domain evaluation. Individual seeds and aggregate
+values show the performance level and its consistency across repeated runs.
+
 ### F04 — Primary six-direction ROC-AUC
 
 Use the same organization as F03, replacing balanced accuracy with ROC-AUC.
 Show individual seeds, mean, and population standard deviation. Include the
 0.5 chance reference.
+
+**What it shows.** Threshold-independent score ranking for the same six
+directions. It checks whether the balanced-accuracy pattern persists when the
+specific decision threshold is removed from the comparison.
 
 ### F05 — Paired cross-domain generalization gaps
 
@@ -206,6 +245,10 @@ Plot the three seed-level gaps for both transfer directions and show the mean
 with population standard deviation. Do not label the difference between
 `M→N` and `M→A` as a transfer gap because both domains were present during
 mixed training.
+
+**What it shows.** The paired loss in balanced accuracy when each specialized
+model is moved from its own domain to the other domain. The two gaps expose the
+direction and asymmetry of cross-domain degradation.
 
 ### F06 — Embedding-condition sensitivity
 
@@ -223,6 +266,10 @@ Create:
 Do not add error bars. State `seed 1 only` in the subtitle or caption. Keep the
 direction ordering identical to F03 and F04.
 
+**What it shows.** How the six-direction result changes with payload and
+embedding algorithm. Because every compared condition uses seed 1 only, the
+figure does not estimate variability across repeated training runs.
+
 ### F07 — Mixed-training controls
 
 Compare the three mixed conditions in run set E on:
@@ -235,6 +282,10 @@ Compare the three mixed conditions in run set E on:
 Use a compact two-panel figure or another layout that remains readable. Do not
 add uncertainty bars. Make the data-volume and epoch-budget distinction clear
 in the legend labels.
+
+**What it shows.** The effect of longer mixed-domain training and of using the
+full union of both training domains. The full-union comparison changes both
+data volume and the number of optimizer updates per epoch.
 
 ### F08 — External AI-cover evaluation
 
@@ -257,6 +308,11 @@ detector was trained or threshold-tuned on the two external datasets.
 If the 500-epoch or full-union checkpoint is included, add it as a clearly
 separated single-seed marker or a separate supplemental figure. Do not merge it
 into the primary three-seed aggregates.
+
+**What it shows.** Transfer of the natural-, FLUX-, and mixed-trained primary
+checkpoints to realistic-prompt FLUX and Stable Diffusion 3 covers. Since no
+model is trained directly on the external sets, the figure measures checkpoint
+transfer rather than intrinsic same-domain detectability of those sources.
 
 ## Diagnostic data to preserve but not plot by default
 
@@ -287,7 +343,9 @@ the existing tables already communicate the result.
 - Use a readable serif or neutral sans-serif font that embeds correctly in PDF.
 - Avoid 3D effects, gradients, shadows, and decorative backgrounds.
 - Use sufficiently large text for insertion at thesis page width.
-- Keep titles concise; put methodological detail in captions or provenance.
+- Do not place a figure-level title or subtitle inside the plotting canvas;
+  use the LaTeX caption for that information.
+- Keep necessary panel headings concise and use normal font weight.
 - Prefer direct category labels and short legends over W&B run names.
 - Place legends outside the plotting area when they would cover data.
 - Avoid redundant legends when the x-axis already identifies every category.
@@ -303,10 +361,11 @@ Use the same seed colors in the natural, AI, and mixed training panels:
 | Seed | Color | Line style | Marker, if used |
 |---|---|---|---|
 | Seed 1 | blue `#0072B2` | solid | circle |
-| Seed 2 | orange `#E69F00` | dashed | square |
-| Seed 3 | purple `#CC79A7` | dotted | triangle |
+| Seed 2 | orange `#E69F00` | solid | square |
+| Seed 3 | purple `#CC79A7` | solid | triangle |
 
-Do not place markers at every epoch. If markers are used, space them sparsely.
+Use `linewidth=1.0` for all F01 and F02 epoch curves. Do not place markers at
+every epoch. Use hollow markers only for the selected checkpoints.
 
 ### Domain colors for result figures
 
