@@ -33,3 +33,7 @@ run-logs/
 
 # The canonical thesis workspace is Overleaf; keep the local mirror untracked.
 /thesis/
+
+.DS_Store
+
+/tmp

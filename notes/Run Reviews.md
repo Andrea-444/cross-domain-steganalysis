@@ -1,7 +1,7 @@
 ---
 type: run-review-log
 status: complete
-updated: 2026-10-29
+updated: 2026-11-01
 ---
 
 # Run Reviews
@@ -29,3 +29,7 @@ for cross-seed conclusions.
 | 14 | full-union mixed natural and AI-generated covers | 1 | 300 epochs | [[run-reviews/Run 14 - Full-union mixed seed 1 300 epochs]] |
 | 15 | natural covers, S-UNIWARD 0.2 bpp | 1 | 300 epochs | [[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]] |
 | 16 | AI-generated covers, S-UNIWARD 0.2 bpp | 1 | 300 epochs | [[run-reviews/Run 16 - AI seed 1 S-UNIWARD 0.2 bpp]] |
+| 17 | mixed natural and AI-generated covers, S-UNIWARD 0.2 bpp | 1 | 300 epochs | [[run-reviews/Run 17 - Mixed seed 1 S-UNIWARD 0.2 bpp]] |
+| 18 | natural covers, MiPOD 0.4 bpp | 1 | 300 epochs | [[run-reviews/Run 18 - Natural seed 1 MiPOD 0.4 bpp]] |
+| 19 | AI-generated covers, MiPOD 0.4 bpp | 1 | 300 epochs | [[run-reviews/Run 19 - AI seed 1 MiPOD 0.4 bpp]] |
+| 20 | mixed natural and AI-generated covers, MiPOD 0.4 bpp | 1 | 300 epochs | [[run-reviews/Run 20 - Mixed seed 1 MiPOD 0.4 bpp]] |
