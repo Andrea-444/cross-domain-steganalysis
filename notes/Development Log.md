@@ -308,3 +308,13 @@ Use this as a chronological lab and engineering notebook. Capture what changed, 
 - **Problems or surprises:** The remote `dev` branch contained an accidentally committed 10,049-line training log. The removed `.claude` workflow also described an obsolete state in which `dev` and release tags did not exist.
 - **Next step:** Review the cleanup diff, merge it into `dev`, and postpone functional source reorganization until the current S-UNIWARD and MiPOD experiment conditions are complete.
 - **Related files/results:** `README.md`, `LICENSE`, `.gitignore`.
+
+## 2026-10-31 — Lower-payload matrix completed and MiPOD robustness started
+
+- **Goal:** Complete the one-seed S-UNIWARD 0.2 bpp matrix and test whether the main domain pattern survives a change to MiPOD at 0.4 bpp.
+- **Work completed:** Trained the mixed S-UNIWARD 0.2 detector and the natural, AI and mixed MiPOD 0.4 detectors. Recorded them as Runs 17 to 20.
+- **Commands or experiment configuration:** Seed 1, 300 epochs, batch size 32, learning rate 1e-4. Each command trained one domain and evaluated its two paired directions.
+- **Result:** Mixed S-UNIWARD 0.2 is at chance on both natural and AI-generated covers. MiPOD 0.4 reproduces the specialist ordering and weak cross-domain transfer. Its mixed detector reaches 0.7284 balanced accuracy on natural covers and 0.6073 on AI-generated covers, a fixed-model gap of +0.1211.
+- **Problems or surprises:** The mixed 0.2 detector learns some training-set signal while validation and test discrimination remain at chance. The supplied W&B downloads omit the local result folders, W&B run IDs and exact checkpoint-selection metadata, so these remain to be recovered from the GPU host.
+- **Next step:** Freeze the experiment set and move to analysis, tables, figures and paper writing. Additional runs are deferred unless thesis review identifies a necessary gap.
+- **Related files/results:** [[run-reviews/Run 17 - Mixed seed 1 S-UNIWARD 0.2 bpp]], [[run-reviews/Run 18 - Natural seed 1 MiPOD 0.4 bpp]], [[run-reviews/Run 19 - AI seed 1 MiPOD 0.4 bpp]], [[run-reviews/Run 20 - Mixed seed 1 MiPOD 0.4 bpp]].

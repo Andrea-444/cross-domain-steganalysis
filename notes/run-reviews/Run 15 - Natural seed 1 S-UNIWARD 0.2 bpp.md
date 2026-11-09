@@ -2,7 +2,7 @@
 type: run-review
 run: 15
 status: reviewed
-updated: 2026-10-27
+updated: 2026-11-01
 ---
 
 # Run 15 — Natural-domain seed 1 with S-UNIWARD at 0.2 bpp
@@ -85,9 +85,9 @@ while the AI-domain result stayed near chance.
 - The model learned slowly: training loss remained near chance for roughly the
   first 118 epochs. Equal nominal epoch budgets therefore contain fewer useful
   learning epochs at 0.2 bpp than at 0.4 bpp.
-- The AI-trained 0.2 bpp stage has since completed as Run 16. The mixed-domain
-  stage is still required before this payload can support the cleaner paired
-  domain comparison.
+- The AI-trained and mixed-domain 0.2 bpp stages have since completed as Runs
+  16 and 17. Run 17 keeps the detector fixed across both test domains, but it
+  is at chance on both and therefore cannot estimate a meaningful domain gap.
 - No significance claim is made from one seed.
 
 ## Evidence used
@@ -96,3 +96,4 @@ while the AI-domain result stayed near chance.
 - `/Users/andrea/Downloads/output.log`
 - `/Users/andrea/Downloads/wandb-summary.json`
 - [[run-reviews/Run 02 - Natural seed 1 300 epochs]]
+- [[run-reviews/Run 17 - Mixed seed 1 S-UNIWARD 0.2 bpp]]

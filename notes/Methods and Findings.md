@@ -1,7 +1,7 @@
 ---
 type: thesis-source-record
 status: active
-updated: 2026-10-27
+updated: 2026-11-01
 audience: thesis-writing
 ---
 
@@ -1211,8 +1211,7 @@ generalization.
 The training curve is also slower. Training loss first falls below 0.69 at
 epoch 119, and the selected checkpoint is epoch 286 of 300 at validation loss
 0.6756. This one-seed value remains a lower-bound sensitivity result. The
-AI-trained stage has since completed as Run 16; the mixed-domain 0.2 bpp stage
-is still needed before the cleaner paired comparison of cover domains.
+AI-trained and mixed-domain stages have since completed as Runs 16 and 17.
 
 Detailed review:
 [[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
@@ -1247,11 +1246,123 @@ without obtaining useful validation or test separation.
 specialist reaches 0.5965 balanced accuracy and 0.6600 ROC-AUC, while the AI
 specialist reaches 0.5067 and 0.5102. The observed specialist difference is
 8.98 points in balanced accuracy and 14.98 points in ROC-AUC. This remains a
-one-seed comparison that changes both training and test domain. The mixed
-detector is required to keep the trained model fixed while changing only the
-test domain.
+one-seed comparison that changes both training and test domain. Run 17 keeps
+the detector fixed across the two test domains, but it is at chance on both
+and therefore cannot provide a meaningful estimate of their relative
+difficulty.
 
 Detailed review:
 [[run-reviews/Run 16 - AI seed 1 S-UNIWARD 0.2 bpp]]. W&B run:
 `ittjl1x0`. The local result-folder path was not present in the supplied W&B
 downloads and remains to be recovered from the GPU host.
+
+## 17. Lower-payload sensitivity: mixed seed 1 at 0.2 bpp
+
+The mixed-domain detector completes the seed-1 S-UNIWARD 0.2 bpp matrix. It
+uses the same total training size as a specialist, split equally between the
+two cover domains.
+
+| Direction and metric | 0.4 bpp | 0.2 bpp | Change |
+|---|---:|---:|---:|
+| `mixed_to_real` balanced accuracy | 0.6427 | **0.5026** | -0.1401 |
+| `mixed_to_real` ROC-AUC | 0.7553 | **0.5042** | -0.2511 |
+| `mixed_to_ai` balanced accuracy | 0.6304 | **0.5046** | -0.1258 |
+| `mixed_to_ai` ROC-AUC | 0.7192 | **0.5129** | -0.2063 |
+
+**Observation.** The mixed detector is at chance on both domains. Its
+natural-minus-AI gap is -0.0021 in balanced accuracy and -0.0087 in ROC-AUC.
+Training loss falls below 0.69 at epoch 49 and reaches 0.6641, but validation
+loss rises to 1.2457 by epoch 300.
+
+**Interpretation.** Halving the payload removes the useful mixed-domain signal
+seen at 0.4 bpp. The near-zero domain gap is a floor effect, not evidence that
+the two cover domains are equally difficult at 0.2 bpp.
+
+Detailed review:
+[[run-reviews/Run 17 - Mixed seed 1 S-UNIWARD 0.2 bpp]]. The local result
+folder and W&B run ID were not present in the supplied downloads.
+
+## 18. MiPOD robustness: natural seed 1 at 0.4 bpp
+
+The first MiPOD detector keeps the dataset, payload, preprocessing, detector,
+seed and training recipe fixed relative to S-UNIWARD Run 2. The embedding
+algorithm is the intended change.
+
+| Direction and metric | S-UNIWARD | MiPOD | Change |
+|---|---:|---:|---:|
+| `real_to_real` balanced accuracy | 0.7608 | **0.7633** | +0.0025 |
+| `real_to_real` ROC-AUC | 0.8780 | **0.8784** | +0.0004 |
+| `real_to_ai` balanced accuracy | 0.5077 | **0.5159** | +0.0082 |
+| `real_to_ai` ROC-AUC | 0.5288 | **0.5430** | +0.0142 |
+
+**Observation.** Natural same-domain detection is almost identical for MiPOD
+and S-UNIWARD. Natural-to-AI transfer remains weak and is strongly biased
+toward predicting stego on AI images.
+
+**Interpretation.** The successful natural-domain result and failed transfer
+are not specific to S-UNIWARD. The small numerical MiPOD gains come from one
+seed and are not evidence that MiPOD transfers better.
+
+Detailed review: [[run-reviews/Run 18 - Natural seed 1 MiPOD 0.4 bpp]]. The
+local result folder and W&B run ID were not present in the supplied downloads.
+
+## 19. MiPOD robustness: AI seed 1 at 0.4 bpp
+
+The matching AI-domain MiPOD detector reaches 0.6355 balanced accuracy and
+0.7212 ROC-AUC on AI-generated covers. On natural covers it reaches 0.5257 and
+0.5654, with only 119/974 stego images detected at the fixed threshold.
+
+| Same-domain metric | Natural MiPOD | AI MiPOD | Natural minus AI |
+|---|---:|---:|---:|
+| Balanced accuracy | 0.7633 | 0.6355 | **+0.1278** |
+| ROC-AUC | 0.8784 | 0.7212 | **+0.1573** |
+| MCC | 0.5271 | 0.2725 | **+0.2546** |
+
+**Observation.** MiPOD repeats the S-UNIWARD ordering: the natural specialist
+scores higher than the AI specialist, while both cross-domain directions are
+weak. Training loss falls below 0.69 at epoch 10, and the lowest rounded
+validation loss occurs near the budget limit at epoch 296.
+
+**Interpretation.** The main domain pattern survives a change in embedding
+algorithm, which strengthens it as a robustness finding. The comparison still
+changes both training and test domains. Run 20 supplies the fixed-detector
+test-domain comparison and finds a similarly large MiPOD gap.
+
+Detailed review: [[run-reviews/Run 19 - AI seed 1 MiPOD 0.4 bpp]]. The local
+result folder and W&B run ID were not present in the supplied downloads.
+
+## 20. MiPOD robustness: mixed seed 1 at 0.4 bpp
+
+The mixed MiPOD detector completes the one-seed embedding-method robustness
+condition. It uses the same total training size as a specialist, split equally
+between natural and AI-generated covers.
+
+| Metric | Natural covers | AI-generated covers | Natural minus AI |
+|---|---:|---:|---:|
+| Balanced accuracy | 0.7284 | 0.6073 | **+0.1211** |
+| ROC-AUC | 0.8388 | 0.6850 | **+0.1538** |
+| MCC | 0.4628 | 0.2200 | **+0.2428** |
+
+**Observation.** One fixed detector performs substantially better on natural
+than on AI-generated covers. The fixed-model gap closely matches the MiPOD
+specialist gap of +0.1278 balanced accuracy and +0.1573 ROC-AUC. Training loss
+falls below 0.69 at epoch 17, and the lowest rounded validation loss occurs at
+epoch 287.
+
+The controlled comparison against mixed S-UNIWARD at 0.4 bpp shows that MiPOD
+raises `mixed_to_real` balanced accuracy by 0.0857 while lowering
+`mixed_to_ai` by 0.0231. The corresponding ROC-AUC changes are +0.0835 and
+-0.0342.
+
+**Interpretation.** Cover-domain difficulty interacts with the embedding
+method. The mixed S-UNIWARD detector showed only a 0.0123 natural advantage at
+seed 1, whereas the mixed MiPOD detector shows 0.1211. The thesis should not
+report one universal natural-versus-AI difficulty gap; it should report that
+the gap is small for S-UNIWARD and large for MiPOD under the tested recipe.
+
+This is the final training run in the experiment set frozen by the user on
+2026-11-01. Further experiments are deferred while the work moves into the
+paper-writing phase.
+
+Detailed review: [[run-reviews/Run 20 - Mixed seed 1 MiPOD 0.4 bpp]]. The
+local result folder and W&B run ID were not present in the supplied downloads.

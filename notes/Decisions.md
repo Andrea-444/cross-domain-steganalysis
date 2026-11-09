@@ -322,3 +322,12 @@ Record decisions that would otherwise need to be rediscovered. Keep entries shor
 - **Reasoning:** This changes the prompt distribution while holding the generator at FLUX. It is a cleaner test of prompt/content shift than immediately choosing a multistyle subset that changes generator and style together.
 - **Consequences:** Realistic FLUX improves rather than reduces detection for FLUX-trained checkpoints. The SD3 loss is therefore more consistent with generator-specific shift. A matching realistic SD3 evaluation is the next clean cell in the 2x2 comparison; no SD3 training is required.
 - **Related:** [[run-reviews/Run 12 - SD3 external checkpoint evaluation]], [[run-reviews/Run 13 - FLUX realistic external checkpoint evaluation]].
+
+### 2026-11-01 — Freeze the current experiment set and move to writing
+
+- **Status:** accepted
+- **Context:** The project now has the three-seed S-UNIWARD 0.4 bpp primary protocol, lower-payload S-UNIWARD 0.2 bpp sensitivity runs, external-generator evaluations on SD3 and realistic-prompt FLUX, training-budget and full-union sensitivities, and one-seed natural, AI and mixed MiPOD 0.4 bpp robustness runs. Run 20 completes the final pending mixed MiPOD stage.
+- **Decision:** Stop launching additional training or evaluation runs for the current thesis version. Move the active work into result consolidation, tables, figures and paper writing.
+- **Reasoning:** The existing evidence answers the main questions and includes checks for payload, embedding method, training budget, mixed training and generator shift. More experiments would delay the thesis while adding scope faster than they resolve the remaining limitations.
+- **Consequences:** One-seed sensitivity and MiPOD results must remain labelled as such, with no significance or cross-seed uncertainty claims. Missing local result-folder paths, W&B IDs and checkpoint metadata should still be recovered as archival work, because that does not create new experimental evidence. Further experiments are deferred unless supervisor or draft review identifies a specific necessary gap.
+- **Related:** [[Methods and Findings]] sections 10 to 20 and [[run-reviews/Run 20 - Mixed seed 1 MiPOD 0.4 bpp]].

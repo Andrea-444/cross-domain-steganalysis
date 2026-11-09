@@ -2,7 +2,7 @@
 type: run-review
 run: 16
 status: reviewed
-updated: 2026-10-29
+updated: 2026-11-01
 ---
 
 # Run 16 — AI-domain seed 1 with S-UNIWARD at 0.2 bpp
@@ -109,8 +109,9 @@ works.
   training loss continued to improve. This is consistent with weak or unstable
   generalization, but it does not by itself identify the cause.
 - The natural-versus-AI comparison changes both the training and test domains.
-  The mixed-domain 0.2 bpp run remains required for the cleaner paired domain
-  comparison.
+  The mixed-domain 0.2 bpp run has since completed as Run 17, but it is at
+  chance on both test domains and therefore does not provide a useful estimate
+  of their relative difficulty.
 - No significance claim is made from one seed.
 
 ## Evidence used
@@ -120,3 +121,4 @@ works.
 - `/Users/andrea/Downloads/wandb-summary (1).json`
 - [[run-reviews/Run 03 - AI seed 1 300 epochs]]
 - [[run-reviews/Run 15 - Natural seed 1 S-UNIWARD 0.2 bpp]]
+- [[run-reviews/Run 17 - Mixed seed 1 S-UNIWARD 0.2 bpp]]
